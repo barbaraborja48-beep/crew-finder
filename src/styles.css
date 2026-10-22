@@ -1,0 +1,143 @@
+/* Nocturne tokens (from the design handoff) + Crew Finder app styles. */
+:root {
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-accent: #9184d9;
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
+
+  --color-accent-100: #f5f4ff;
+  --color-accent-200: #e7e5fe;
+  --color-accent-300: #d2cefd;
+  --color-accent-400: #b5abfc;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #796cbf;
+  --color-accent-700: #5d5294;
+  --color-accent-800: #423a6a;
+  --color-accent-900: #2b2741;
+
+  --me: #3bf0ff;
+  --sos: #ff3b5c;
+  --sos-text: #ff7a92;
+  --sos-line: #ff5c7a;
+  --queued: #ffd97a;
+
+  --font-body: 'Inter', system-ui, sans-serif;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 0 0 1px #3f424d;
+  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0, 0, 0, 0.65);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --hdr-top: calc(var(--safe-top) + 14px);
+  --tabbar-h: calc(58px + var(--safe-bottom));
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--color-bg); overscroll-behavior: none; }
+body {
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+button { font-family: var(--font-body); color: inherit; }
+input::placeholder { color: var(--color-neutral-600); }
+a { color: var(--color-accent-300); }
+:focus { outline: none; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* The app is a phone-width column, centred on bigger screens. */
+.app {
+  position: fixed;
+  inset: 0;
+  max-width: 480px;
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+@media (min-width: 520px) {
+  .app { box-shadow: 0 0 0 1px var(--color-neutral-900); }
+}
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* Buttons are outlined, never filled. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none;
+  font-weight: 500; font-size: 14px; line-height: 1.2; color: var(--color-text);
+  background: transparent; border: 1px solid transparent;
+  padding: 5.6px 10px; border-radius: var(--radius-md);
+}
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { color: var(--color-accent); border-color: var(--color-accent); }
+.btn-primary:active { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.btn-secondary { border-color: var(--color-divider); }
+.btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+.btn-ghost { color: var(--color-accent); padding-inline: 3px; }
+.btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+.btn-block { width: 100%; }
+
+.round {
+  width: 36px; height: 36px; flex: none; border: 0; cursor: pointer; border-radius: 50%;
+  background: var(--color-surface); box-shadow: var(--shadow-sm); color: var(--color-neutral-300);
+  display: grid; place-items: center; font-size: 16px;
+}
+
+.input {
+  width: 100%; height: 44px; padding: 0 12px; font: 400 15px var(--font-body);
+  color: var(--color-text); caret-color: var(--color-accent);
+  background: var(--color-surface); border: 0; box-shadow: var(--shadow-sm); border-radius: var(--radius-md);
+}
+.input:focus-visible { box-shadow: 0 0 0 1px var(--color-accent); outline: none; }
+
+.kicker { font-size: 11px; color: var(--color-neutral-500); }
+.title { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.15; }
+
+.tabbar {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+  height: var(--tabbar-h); padding: 6px 10px var(--safe-bottom);
+  background: rgba(30, 32, 46, 0.92); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  box-shadow: 0 -1px 0 var(--color-neutral-900);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+}
+.tabbar button {
+  border: 0; background: transparent; cursor: pointer; height: 50px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font: 500 10px var(--font-body);
+}
+
+.toggle { width: 46px; height: 28px; border: 0; cursor: pointer; border-radius: 14px; position: relative; flex: none; transition: background .15s; }
+.toggle span { position: absolute; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--color-neutral-100); transition: left .15s; }
+
+.toast {
+  position: absolute; left: 50%; top: calc(var(--safe-top) + 10px); transform: translateX(-50%); z-index: 20;
+  padding: 8px 14px; border-radius: 999px; background: var(--color-surface); box-shadow: var(--shadow-md);
+  font-size: 12px; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
+  display: flex; align-items: center; gap: 6px; animation: up .25s ease-out;
+}
+
+@keyframes ping { 0% { transform: translate(-50%, -50%) scale(1); opacity: .8 } 100% { transform: translate(-50%, -50%) scale(3.2); opacity: 0 } }
+@keyframes up { from { transform: translate(-50%, 8px); opacity: 0 } to { transform: translate(-50%, 0); opacity: 1 } }
+@keyframes rise { from { transform: translateY(12px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes sheet { from { transform: translateY(100%) } to { transform: none } }

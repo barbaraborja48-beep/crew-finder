@@ -1,0 +1,110 @@
+# Crew Finder: setup, step by step
+
+This gets the app live for Elrow Halloween Takeover (31.10.26). Plan on about 45 minutes, and no coding. You need a laptop for steps 1 to 6 and an iPhone for step 7 onwards.
+
+Do it **this week**. Supabase's free plan pauses a project after about a week with no activity, so set it up now, test it, and open the app once or twice before the 31st.
+
+---
+
+## 1. Create the Supabase project (5 min)
+
+1. Go to [supabase.com](https://supabase.com) and sign up (GitHub or email).
+2. Click **New project**.
+3. Name: `crew-finder`. Region: **West EU (Ireland)** or **Central EU (Frankfurt)**, whichever is offered, since both are close to Madrid.
+4. Set a database password and save it somewhere. The app never uses it, but Supabase asks for it.
+5. Wait a minute or two while it sets up.
+
+## 2. Create the database (5 min)
+
+This step creates the tables, the privacy rules, the Elrow map pins, and the photo storage.
+
+1. In the left sidebar, open **SQL Editor** and click **New query**.
+2. Open `supabase/migrations/20261022174557_crew_finder.sql` from this project, copy everything, paste it in, and click **Run**. You should see "Success". A notice about `pg_cron` is fine.
+3. New query again. Paste `supabase/migrations/20261022174600_seed_elrow.sql` and **Run**.
+4. Check it worked: open **Table Editor** → `places`. You should see 23 rows (elrow, Brunch!, WC, Bar…).
+
+> If you'd rather use the terminal: `npx supabase login`, `npx supabase link`, then `npx supabase db push`.
+
+## 3. Turn on anonymous sign-ins (1 min)
+
+Nobody makes an account. Each phone gets a silent anonymous login, and the invite code decides who sees what.
+
+1. Sidebar → **Authentication**, then find the sign-in settings (currently **Sign In / Providers**).
+2. Switch on **Allow anonymous sign-ins** and save.
+
+Without this, joining fails with "Anonymous sign-ins are off".
+
+## 4. Copy two values (2 min)
+
+Click **Connect** at the top of the dashboard, or go to **Project Settings → API Keys**. You need:
+
+- **Project URL**, which looks like `https://abcdefgh.supabase.co`
+- **Publishable key**, which starts with `sb_publishable_`. If you only see an `anon` key under "Legacy", that works too.
+
+Both are safe to put in the app. Your crew's data is protected by the database rules from step 2, not by hiding these keys. Never use the **secret** or `service_role` key here.
+
+## 5. Put the code on GitHub (10 min)
+
+1. Make a free account at [github.com](https://github.com) if you don't have one.
+2. Click **+** → **New repository**. Name it `crew-finder`, set it to **Private**, and create it.
+3. On the empty repo page, click **uploading an existing file**. Drag in everything from this project folder **except** `node_modules` and `dist` (if they exist). Click **Commit changes**.
+
+(Or tell Claude to push it for you once the repo exists.)
+
+## 6. Deploy on Vercel (5 min)
+
+1. Go to [vercel.com](https://vercel.com) and sign up with your GitHub account.
+2. **Add New → Project**, then pick the `crew-finder` repo and click **Import**.
+3. Framework should say **Vite**. Leave the build settings alone.
+4. Open **Environment Variables** and add two:
+   - `VITE_SUPABASE_URL` = your Project URL
+   - `VITE_SUPABASE_ANON_KEY` = your publishable key
+5. Click **Deploy**. After a minute you get a link like `crew-finder-xyz.vercel.app`.
+
+If you change the variables later, go to **Deployments → ⋯ → Redeploy**, because the values are baked in at build time.
+
+Netlify works the same way: build command `npm run build`, publish folder `dist`, same two variables.
+
+## 7. Start your crew (iPhone, 5 min)
+
+1. Open your Vercel link in **Safari**.
+2. **Start a crew** → name it → **Create crew**.
+3. Pick your name and laser color → **Join crew**.
+4. Tap **Share** → **Add to Home Screen** → **Add**.
+5. Open **Crew** from the Home Screen. It starts fresh, because Home Screen apps keep their own storage, separate from Safari. Tap **I have a code**, enter the 8-letter code, and use **exactly the same name**. You'll be back in as the same person, with the same color.
+6. **Crew tab → Invite friends** to send the link in WhatsApp. Each friend repeats steps 1, 3, 4 and 5.
+
+## 8. Optional: one-tap "I'm here" Shortcut
+
+**Crew tab → One-tap check-in for iPhone** walks each person through building it in the Shortcuts app. Every field has a copy button, and there's a **Test it from here** button at the end. The Shortcut can go on the Home Screen as a widget, on the Action button, or on Back Tap (Settings → Accessibility → Touch → Back Tap).
+
+The Shortcut needs signal. Unlike the app, it can't queue.
+
+## 9. Before you leave for the festival
+
+- Everyone opens the Home Screen app **once that day with signal or wifi**. That caches the map and the latest crew state.
+- Test without signal: put the phone in airplane mode, open the app, and tap a spot on a stage. The pill should say **Queued · no signal**. Turn airplane mode off and it flips to **Sent** within seconds.
+- Agree on the meet spot (Crew tab, default is Picnic by La Plaza, on the hour).
+- Low Power Mode is fine.
+
+## 10. After the event
+
+Crew data deletes itself **48 hours after 02:00 on 1 Nov**. A scheduled job does this if `pg_cron` was available, and you can check under **Integrations → Cron** for `purge-old-crews`. If it isn't there, run this in the SQL Editor on 3 Nov:
+
+```sql
+select public.purge_old_crews();
+```
+
+Photos live separately: **Storage → photos**, select all, delete.
+
+---
+
+## What to expect (honest limits)
+
+- **Nothing updates while the app is closed.** iPhones freeze web apps in the background, so open the app to see where people are. There are no push notifications in this version, so a Ping or SOS shows up in chat the next time your friends open the app.
+- **Live updates** come over a realtime connection. When that drops (it will, at a festival), the app checks for news every 15 seconds while it's open.
+- **Battery %** only shows for Android friends. iPhone Safari doesn't share it.
+- **SOS** goes to your crew only. It also points you to the Safe Space on the map. It does not contact festival staff.
+- **Bluetooth "friend nearby", the UWB arrow, real widgets and Live Activities** need a native iOS app. They were out of scope for the web version, as the design handoff says.
+- **The Elrow map image** is the official sitemap, for personal use. The site tells search engines not to index it, but keep the link within your crew.
+- **Joining needs signal once** (wifi at home is perfect). After that, everything works offline and syncs later.
