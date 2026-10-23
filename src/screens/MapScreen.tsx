@@ -3,7 +3,7 @@ import { alive } from '../lib/rules'
 import { glow, hasCloseUp, mapPos, outline, toMap, TYPES, MAP_W, MAP_H, ME, type PlaceType } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
-import { ProfileButton, Scaled, SyncPill } from '../components/common'
+import { Freshness, ProfileButton, Scaled, SmsFallback, SyncPill } from '../components/common'
 
 export function MapScreen() {
   const s = useStore()
@@ -166,7 +166,11 @@ export function MapScreen() {
       </Scaled>
 
       <div className="scroll no-scrollbar" style={{ flex: 1, marginTop: -12, position: 'relative', background: 'var(--color-surface)', borderRadius: '24px 24px 0 0', boxShadow: 'var(--shadow-sm)', padding: '8px 20px calc(var(--tabbar-h) + 12px)' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-neutral-700)', margin: '0 auto 6px' }} />
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-neutral-700)', margin: '0 auto 2px' }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Freshness />
+        </div>
+        <SmsFallback />
         {rows.length === 0 && (
           <div style={{ padding: '18px 0', fontSize: 13, color: 'var(--color-neutral-500)', textAlign: 'center' }}>
             Nobody else here yet. Invite your crew from the Crew tab.

@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { store, useStore, type Screen } from '../lib/store'
 import { alive } from '../lib/rules'
-import { hasCloseUp } from '../lib/venue'
+import { hasCloseUp, STATUS, where } from '../lib/venue'
+import { spotSms, smsHref } from '../lib/sms'
 import type { SyncDef } from '../lib/view'
 
 /** Lays out children at a fixed design size (e.g. 390×346) and scales to the phone's width. */
@@ -109,5 +110,60 @@ export function ProfileButton() {
     <button aria-label="Your profile" onClick={() => store.ui({ sheet: true })} style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: '50%' }}>
       <Avatar name={me.name} color={me.color} />
     </button>
+  )
+}
+
+/** "Updated 40s ago" so you know how fresh the map is. Tap to check now. */
+export function Freshness({ style }: { style?: CSSProperties }) {
+  const s = useStore()
+  const [, tick] = useState(0)
+  useLayoutEffect(() => {
+    const t = setInterval(() => tick(n => n + 1), 10_000)
+    return () => clearInterval(t)
+  }, [])
+  const age = s.lastSync ? Math.floor((Date.now() - s.lastSync) / 1000) : null
+  const label = s.syncing
+    ? 'Updating…'
+    : age == null
+      ? 'Not updated yet'
+      : `Updated ${age < 15 ? 'just now' : age < 60 ? `${age}s ago` : age < 3600 ? `${Math.floor(age / 60)}m ago` : 'over an hour ago'}`
+  const stale = age == null || age > 180
+  return (
+    <button
+      onClick={() => store.sync()}
+      style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: '4px 0', font: '400 11px var(--font-body)', color: stale && s.signal === 'none' ? 'var(--queued)' : 'var(--color-neutral-500)', display: 'flex', alignItems: 'center', gap: 4, ...style }}
+    >
+      <i aria-hidden className={s.syncing ? 'ph ph-arrows-clockwise' : 'ph ph-arrow-clockwise'} />
+      {label}
+    </button>
+  )
+}
+
+/** When your check-in can't get out, offer to text it instead. */
+export function SmsFallback() {
+  const s = useStore()
+  const me = store.me()
+  const mine = store.myDot()
+  if (!me || !mine || me.ghost || !s.pending[mine.id] || s.signal !== 'none' || !alive(mine, Date.now())) return null
+  const body = spotSms({
+    name: me.name,
+    where: where(store.place(mine.place_id), mine.nx, mine.ny),
+    at: mine.born,
+    status: STATUS[me.status]?.[1],
+    note: me.note,
+    battery: me.battery,
+  })
+  return (
+    <a
+      href={smsHref(body)}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 'var(--radius-lg)', boxShadow: '0 0 0 1px #ffc83b88', color: 'var(--queued)', textDecoration: 'none', fontSize: 12 }}
+    >
+      <i aria-hidden className="ph ph-chat-text" style={{ fontSize: 18 }} />
+      <span style={{ flex: 1 }}>
+        <b style={{ fontWeight: 500 }}>No data. Text your spot instead?</b>
+        <span style={{ display: 'block', color: 'var(--color-neutral-400)' }}>Opens Messages with it written for you. It still sends here once you have data.</span>
+      </span>
+      <i aria-hidden className="ph ph-caret-right" />
+    </a>
   )
 }

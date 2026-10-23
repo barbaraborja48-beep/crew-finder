@@ -18,7 +18,8 @@ Tap where you are on the venue map or a stage floor. Your dot glows in your lase
 | Piece | Where |
 | --- | --- |
 | Check-in rules (2:30 life, merge within 34 px, +1:00, +0:30 friend near, 10:00 cap, 20% slower fade) | `src/lib/rules.ts` (unit tested in `rules.test.ts`) |
-| Offline outbox, sync loop with 5 s / 10 s backoff, realtime + 15 s polling fallback, all actions | `src/lib/store.ts` |
+| Offline outbox; one-request delta sync (`crew_sync`), data saver (no socket, 60 s checks, notification-triggered), falls back to the older per-table sync if the DB isn't updated | `src/lib/store.ts`, `supabase/migrations/…_low_data_sync.sql` |
+| Text-message fallback for check-ins and SOS when there's no data | `src/lib/sms.ts`, `SmsFallback` in `src/components/common.tsx` |
 | Photo compression (≤1280 px, JPEG q0.6, ~150 KB) | `src/lib/photo.ts` |
 | Screens: Map, Check in (stage floor), Chat, Crew, Find, Status sheet, SOS, Shortcut setup, onboarding | `src/screens/` |
 | Schema, RLS, RPCs (`create_crew`, `crew_preview`, `join_crew`, `quick_checkin`, `purge_old_crews`), storage bucket, cron | `supabase/migrations/…_crew_finder.sql` |
@@ -33,7 +34,9 @@ No accounts. Each device signs in anonymously, then joins a crew with an 8-chara
 
 ### Sync
 
-Every write is saved to IndexedDB, shown immediately, and sent by a loop. Rows use client-generated UUIDs and upserts, so retries never duplicate. A newer write to the same row replaces the queued one. Photos upload last, and only after text and check-ins are through.
+Every write is saved to IndexedDB, shown immediately, and sent by a loop. Rows use client-generated UUIDs and upserts, so retries never duplicate. A newer write to the same row replaces the queued one. Photos upload separately and last.
+
+Each sync is a single `crew_sync` call: it carries everything queued (compact keys) and returns only rows changed since the last cursor (compact arrays), plus the venue only when its hash changed. Measured with a crew of 6 and a full night of history, with the live connection down: idle on the map went from about 6.7 MB/hour (96 requests per 3 min) to about 0.1 MB/hour (6 per 3 min); 3 check-ins plus a message went from 22 requests/42 KB to 4 syncs/~9.5 KB.
 
 ## Develop
 

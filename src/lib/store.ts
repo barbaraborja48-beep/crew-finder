@@ -16,7 +16,7 @@ import { hasCloseUp, where, ME, STATUS, type Place, type PlaceType, type Venue }
 export interface Member {
   id: string
   crew_id: string
-  user_id: string
+  user_id?: string
   name: string
   color: string
   status: number
@@ -85,6 +85,10 @@ export interface State {
   pending: Record<string, Sync>
   photoFailed: Record<string, boolean>
   signal: 'ok' | 'none'
+  syncing: boolean
+  lastSync: number | null // when we last heard from the server
+  dataSaver: boolean
+  photosShown: Record<string, true> // in data saver, friends' photos load on tap
   toast: { text: string; icon: string; fg: string; key: number } | null
   ui: {
     screen: Screen
@@ -115,6 +119,10 @@ const initial: State = {
   pending: {},
   photoFailed: {},
   signal: typeof navigator !== 'undefined' && !navigator.onLine ? 'none' : 'ok',
+  syncing: false,
+  lastSync: null,
+  dataSaver: loadDataSaver(),
+  photosShown: {},
   toast: null,
   ui: {
     screen: 'map',
@@ -163,18 +171,57 @@ const messageRow = (m: Message): Row => ({ ...withoutLocal(m), born: iso(m.born)
 
 const byId = <T extends { id: string }>(rows: T[]) => Object.fromEntries(rows.map(r => [r.id, r]))
 
+// Compact upload format for crew_sync (short keys, rounded positions, no empty fields).
+const r3 = (n: unknown) => (n == null ? undefined : Math.round((n as number) * 1000) / 1000)
+const packCheckin = (r: Row): Row => ({ i: r.id, p: r.place_id, x: r3(r.nx), y: r3(r.ny), b: ms(r.born as string), l: r.life_s, t: r.taps })
+const packMessage = (r: Row): Row => ({
+  i: r.id,
+  k: r.type,
+  tx: r.text || undefined,
+  u: r.photo_url || undefined,
+  p: r.place_id || undefined,
+  x: r3(r.nx),
+  y: r3(r.ny),
+  b: ms(r.born as string),
+  to: r.to_member || undefined,
+})
+
+interface SyncResponse {
+  gone?: boolean
+  now: string
+  rejected: string[]
+  members: Member[]
+  checkins: [string, string, string, number, number, number, number, number, number][]
+  messages: [string, string, MsgType, string, string | null, string | null, number | null, number | null, number, string | null][]
+  crew?: Crew
+  venue?: Venue
+  places?: Place[]
+  places_hash?: string
+}
+
+const DATA_SAVER_KEY = 'crew-data-saver'
+function loadDataSaver() {
+  try {
+    return localStorage.getItem(DATA_SAVER_KEY) !== '0' // on unless you turned it off
+  } catch {
+    return true
+  }
+}
+
 // ─── store ────────────────────────────────────────────────────────────────
 
 class Store {
   state: State = initial
   private listeners = new Set<() => void>()
   private channel: RealtimeChannel | null = null
-  private flushing = false
-  private flushTimer: ReturnType<typeof setTimeout> | undefined
+  private syncing = false
+  private syncAgain = false
+  private syncTimer: ReturnType<typeof setTimeout> | undefined
+  private lastSyncTry = 0
+  private legacyVenueLoaded = false
   private failStreak = 0
   private saveTimer: ReturnType<typeof setTimeout> | undefined
   private toastTimer: ReturnType<typeof setTimeout> | undefined
-  private lastRefresh = 0
   private slowBonus = 0
   private slowSynced = Date.now()
   private started = false
@@ -198,11 +245,15 @@ class Store {
 
   private save() {
     clearTimeout(this.saveTimer)
-    this.saveTimer = setTimeout(() => {
-      const s = this.state
-      const msgs = Object.values(s.messages).map(withoutLocal)
-      kv.set('snapshot', { session: s.session, venue: s.venue, places: s.places, crew: s.crew, members: s.members, checkins: s.checkins, messages: msgs, ghostDot: s.ghostDot })
-    }, 600)
+    this.saveTimer = setTimeout(() => this.saveNow(), 600)
+  }
+  /** Write the snapshot now (after joining, and when the app goes to the background). */
+  saveNow() {
+    clearTimeout(this.saveTimer)
+    const s = this.state
+    if (!s.session) return Promise.resolve()
+    const msgs = Object.values(s.messages).map(withoutLocal)
+    return kv.set('snapshot', { session: s.session, venue: s.venue, places: s.places, crew: s.crew, members: s.members, checkins: s.checkins, messages: msgs, ghostDot: s.ghostDot })
   }
 
   toast(text: string, icon = 'ph-bold ph-check', fg = ME) {
@@ -284,7 +335,9 @@ class Store {
       const m = data as Member
       if (this.state.session && this.state.session.crewId !== m.crew_id) await this.resetLocal()
       this.set({ session: { memberId: m.id, crewId: m.crew_id }, members: [m] })
-      await this.refresh(true)
+      await this.saveNow() // never lose the membership, even if the app is closed right away
+      await this.sync()
+      await this.saveNow()
       history.replaceState(null, '', '/')
       this.set({ phase: 'ready', busy: false })
       this.start()
@@ -309,33 +362,51 @@ class Store {
   // ─── sync ─────────────────────────────────────────────────────────────
 
   private start() {
-    const crewId = this.state.session!.crewId
-    this.subscribeRealtime(crewId)
-    this.refresh(true) // venue + places once per launch, so map updates reach installed apps
-    this.flush()
-    window.addEventListener('online', () => {
-      this.flush()
-      this.refresh()
-    })
+    window.addEventListener('online', () => this.queueSync())
     window.addEventListener('offline', () => this.set({ signal: 'none' }))
+    window.addEventListener('pagehide', () => this.saveNow())
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return
-      this.flush()
-      if (Date.now() - this.lastRefresh > 10_000) this.refresh()
+      if (document.visibilityState !== 'visible') return void this.saveNow()
+      if (Date.now() - this.lastSyncTry > 5_000) this.queueSync()
     })
     navigator.serviceWorker?.addEventListener('message', e => {
-      if (e.data?.type === 'refresh') this.refresh()
+      if (e.data?.type === 'refresh') this.queueSync() // a notification arrived: fetch just that news
       if (e.data?.type === 'open') {
         this.openFromNotification(e.data.open, e.data.member)
-        this.refresh()
+        this.queueSync()
       }
     })
     if (new URLSearchParams(location.search).get('open')) history.replaceState(null, '', '/')
     setInterval(() => this.tick(), 1000)
-    // Realtime drops a lot on festival signal. Until it's back, poll.
+    // Data saver: no live connection, check every 60 s while open (notifications trigger checks too).
+    // Otherwise a live connection, plus a check every 20 s whenever it's down.
     setInterval(() => {
-      if (!this.live && document.visibilityState === 'visible') this.refresh()
-    }, 15_000)
+      if (document.visibilityState !== 'visible') return
+      const every = this.state.dataSaver ? 60_000 : this.live ? Infinity : 20_000
+      if (Date.now() - this.lastSyncTry >= every - 500) this.sync()
+    }, 5_000)
+    this.applyDataSaver()
+    this.sync()
+  }
+
+  setDataSaver(on: boolean) {
+    try {
+      localStorage.setItem(DATA_SAVER_KEY, on ? '1' : '0')
+    } catch {
+      /* private mode */
+    }
+    this.set({ dataSaver: on })
+    this.applyDataSaver()
+  }
+
+  private applyDataSaver() {
+    if (this.state.dataSaver) {
+      this.channel?.unsubscribe()
+      this.channel = null
+      this.live = false
+    } else if (!this.channel && this.state.session) {
+      this.subscribeRealtime(this.state.session.crewId)
+    }
   }
 
   private subscribeRealtime(crewId: string) {
@@ -356,16 +427,148 @@ class Store {
       })
       .subscribe(status => {
         this.live = status === 'SUBSCRIBED'
-        if (this.live) this.refresh() // catch up on anything missed while offline
+        if (this.live) this.queueSync() // catch up on anything missed while it was down
       })
   }
 
-  /** Pull the latest crew state. Safe to call often. */
-  async refresh(includeVenue = false) {
-    const s = this.state
-    if (!s.session) return
-    this.lastRefresh = Date.now()
-    const crewId = s.session.crewId
+  /** Kept for callers that just want fresh data. */
+  refresh() {
+    return this.sync()
+  }
+
+  /** Batch rapid-fire changes (a check-in also touches your profile) into one request. */
+  private queueSync(delay = 150) {
+    clearTimeout(this.syncTimer)
+    this.syncTimer = setTimeout(() => this.sync(), delay)
+  }
+
+  /**
+   * One round trip: send everything queued, get back only what changed since
+   * the last sync. Typically a few hundred bytes each way.
+   */
+  async sync(): Promise<void> {
+    const session = this.state.session
+    if (!session) return
+    if (this.syncing) {
+      this.syncAgain = true
+      return
+    }
+    this.syncing = true
+    this.lastSyncTry = Date.now()
+    clearTimeout(this.syncTimer)
+    this.set({ syncing: true })
+    let ok = false
+    try {
+      await this.uploadPhotos()
+      const items = (await outbox.all()).filter(i => !i.blob)
+      items.forEach(i => this.setPending(i.id, 'sending'))
+      const checkins: Row[] = []
+      const messages: Row[] = []
+      let me: Row | null = null
+      let crew: Row | null = null
+      for (const it of items) {
+        if (it.table === 'checkins') checkins.push(packCheckin(it.row))
+        else if (it.table === 'messages') messages.push(packMessage(it.row))
+        else if (it.table === 'members') me = { ...(me ?? {}), ...it.row }
+        else if (it.table === 'crews') crew = { ...(crew ?? {}), ...it.row }
+      }
+      if (me) delete me.last_seen // the server stamps it
+      const { data, error, status } = await supabase.rpc('crew_sync', {
+        p_member: session.memberId,
+        p_since: (await kv.get<string>('cursor')) ?? null,
+        p_places: (await kv.get<string>('placesHash')) ?? null,
+        p_checkins: checkins,
+        p_messages: messages,
+        p_me: me,
+        p_crew: crew,
+      })
+      if (error && (error.code === 'PGRST202' || status === 404)) {
+        // The database update (low_data_sync.sql) isn't in yet: use the older, chattier way for now.
+        ok = await this.legacySync(items, session.crewId)
+        return
+      }
+      if (error) {
+        items.forEach(i => this.setPending(i.id, 'queued'))
+        if (isTransient(error, status)) this.set({ signal: 'none' })
+        else console.error('sync refused', error)
+        return
+      }
+      ok = true
+      const r = data as SyncResponse
+      if (r.gone) {
+        // Crew deleted (48 h after the event) or you rejoined on another phone.
+        this.toast('You’re no longer in this crew', 'ph ph-warning', '#ffd97a')
+        return void this.leave()
+      }
+      for (const it of items) {
+        const cur = await outbox.get(it.key)
+        if (cur && cur.v !== it.v) {
+          this.setPending(it.id, 'queued') // changed while sending; goes in the next sync
+          continue
+        }
+        await outbox.del(it.key)
+        this.setPending(it.id, null)
+      }
+      this.applySync(r, session.crewId)
+      if (r.rejected.length) {
+        // e.g. someone took that color a second earlier. Pull a full copy to undo our local guess.
+        this.toast(r.rejected.includes('me') ? 'Couldn’t save that change, try another color or name' : 'Couldn’t send one item', 'ph ph-warning', '#ff7a92')
+        await kv.set('cursor', null)
+        this.syncAgain = true
+      } else {
+        await kv.set('cursor', r.now)
+      }
+      if (r.places_hash) await kv.set('placesHash', r.places_hash)
+      this.set({ signal: 'ok', lastSync: Date.now() })
+    } catch (e) {
+      console.warn('sync failed', e)
+      this.set({ signal: 'none' })
+    } finally {
+      this.syncing = false
+      this.failStreak = ok ? 0 : this.failStreak + 1
+      this.set({ syncing: false })
+      const left = (await outbox.all()).length
+      if (this.syncAgain) {
+        this.syncAgain = false
+        this.queueSync(0)
+      } else if (left) {
+        this.queueSync(ok ? 300 : this.failStreak > 1 ? 10_000 : 5_000)
+      }
+    }
+  }
+
+  private applySync(r: SyncResponse, crewId: string) {
+    if (r.venue && r.places) this.set({ venue: r.venue, places: r.places })
+    if (r.crew) this.set({ crew: r.crew })
+    if (r.members.length) this.mergeMembers(r.members)
+    if (r.checkins.length)
+      this.mergeCheckins(
+        r.checkins.map(([id, member_id, place_id, nx, ny, born, life_s, taps, created_at]) => ({
+          id, member_id, place_id, nx: +nx, ny: +ny, born, life_s, taps, created_at, crew_id: crewId,
+        })),
+      )
+    if (r.messages.length)
+      this.mergeMessages(
+        r.messages.map(([id, member_id, type, text, photo_url, place_id, nx, ny, born, to_member]) => ({
+          id, member_id, type, text, photo_url, place_id, nx: nx == null ? null : +nx, ny: ny == null ? null : +ny, born, to_member, crew_id: crewId,
+        })),
+      )
+  }
+
+  /** Pre-update fallback: send rows one by one, then pull the whole crew. */
+  private async legacySync(items: OutItem[], crewId: string): Promise<boolean> {
+    for (const it of items) {
+      const r = it.op === 'upsert' ? await supabase.from(it.table).upsert(it.row, { onConflict: 'id' }) : await supabase.from(it.table).update(it.row).eq('id', it.id)
+      if (r.error && isTransient(r.error, r.status)) {
+        items.forEach(i => this.setPending(i.id, 'queued'))
+        this.set({ signal: 'none' })
+        return false
+      }
+      const cur = await outbox.get(it.key)
+      if (cur && cur.v !== it.v) continue
+      await outbox.del(it.key)
+      this.setPending(it.id, null)
+    }
     const since = iso(Date.now() - 12 * 3600_000)
     const [crew, members, checkins, messages] = await Promise.all([
       supabase.from('crews').select('*').eq('id', crewId).maybeSingle(),
@@ -374,28 +577,48 @@ class Store {
       supabase.from('messages').select('*').eq('crew_id', crewId).order('born', { ascending: false }).limit(300),
     ])
     const failed = [crew, members, checkins, messages].find(r => r.error)
-    if (failed) {
-      if (isTransient(failed.error, failed.status)) this.set({ signal: 'none' })
-      else console.error(failed.error)
-      return
+    if (failed || !crew.data) {
+      if (failed && isTransient(failed.error, failed.status)) this.set({ signal: 'none' })
+      return false
     }
-    this.set({ signal: 'ok' })
-    if (!crew.data || !(members.data as Member[]).some(m => m.id === s.session!.memberId)) {
-      // Crew deleted (48 h after the event) or you were moved to another device.
-      this.toast('You’re no longer in this crew', 'ph ph-warning', '#ffd97a')
-      return this.leave()
-    }
-    if (includeVenue || !this.state.venue || !this.state.places.length) {
+    if (!this.state.venue || !this.state.places.length || !this.legacyVenueLoaded) {
       const venueId = (crew.data as Crew).venue_id
-      const [v, p] = await Promise.all([
-        supabase.from('venues').select('*').eq('id', venueId).single(),
-        supabase.from('places').select('id,type,name,near,n,x,y,shape').eq('venue_id', venueId),
-      ])
+      const [v, p] = await Promise.all([supabase.from('venues').select('*').eq('id', venueId).single(), supabase.from('places').select('*').eq('venue_id', venueId)])
       if (v.data && p.data) this.set({ venue: v.data as Venue, places: p.data as Place[] })
+      this.legacyVenueLoaded = true
     }
-    this.set({ crew: crew.data as Crew, members: members.data as Member[] })
+    this.set({ crew: crew.data as Crew, signal: 'ok', lastSync: Date.now() })
+    this.mergeMembers(members.data as Member[])
     this.mergeCheckins((checkins.data as Row[]).map(toCheckin))
     this.mergeMessages((messages.data as Row[]).map(toMessage))
+    return true
+  }
+
+  /** Photos go up on their own; once uploaded they become a normal message row in the next sync. */
+  private async uploadPhotos() {
+    for (const it of (await outbox.all()).filter(i => i.blob)) {
+      this.setPending(it.id, 'sending')
+      const path = `${this.state.session!.crewId}/${it.id}.jpg`
+      const up = await supabase.storage.from('photos').upload(path, it.blob!, { contentType: 'image/jpeg', upsert: false })
+      if (up.error) {
+        const e = up.error as { message: string; status?: number; code?: string }
+        const exists = e.status === 409 || e.code === 'ResourceAlreadyExists' || /exists|duplicate/i.test(e.message)
+        if (!exists) {
+          this.setPending(it.id, 'queued')
+          if (isTransient(e, e.status)) {
+            this.set(s => ({ photoFailed: { ...s.photoFailed, [it.id]: true } }))
+            return // weak signal: try photos again next round, text keeps flowing
+          }
+          await outbox.del(it.key)
+          this.toast('Couldn’t send that photo', 'ph ph-warning', '#ff7a92')
+          continue
+        }
+      }
+      const url = supabase.storage.from('photos').getPublicUrl(path).data.publicUrl
+      const cur = (await outbox.get(it.key)) ?? it
+      await outbox.put({ ...cur, blob: undefined, row: { ...cur.row, photo_url: url }, v: Math.random() })
+      this.set(s => ({ messages: { ...s.messages, [it.id]: { ...s.messages[it.id], photo_url: url } } }))
+    }
   }
 
   // Server rows win, except rows we still have queued locally (ours are newer).
@@ -416,7 +639,7 @@ class Store {
   private mergeMembers(rows: Member[]) {
     this.set(s => {
       const map = byId(s.members)
-      for (const r of rows) if (!s.pending[r.id]) map[r.id] = r
+      for (const r of rows) if (!s.pending[r.id]) map[r.id] = { ...map[r.id], ...r }
       return { members: Object.values(map) }
     })
   }
@@ -444,69 +667,7 @@ class Store {
       v: Math.random(),
     })
     this.setPending(id, 'queued')
-    this.flush()
-  }
-
-  /** Send everything queued. Text and check-ins first, photos last. */
-  async flush() {
-    if (this.flushing || !this.state.session) return
-    clearTimeout(this.flushTimer)
-    this.flushing = true
-    let failed = false
-    try {
-      const items = (await outbox.all()).sort((a, b) => Number(!!a.blob) - Number(!!b.blob) || a.createdAt - b.createdAt)
-      for (const it of items) {
-        this.setPending(it.id, 'sending')
-        const result = await this.send(it)
-        if (result === 'retry') {
-          this.setPending(it.id, 'queued')
-          if (it.blob) this.set(s => ({ photoFailed: { ...s.photoFailed, [it.id]: true } }))
-          failed = true
-          break
-        }
-        const cur = await outbox.get(it.key)
-        if (cur && cur.v !== it.v) {
-          this.setPending(it.id, 'queued') // changed while sending; next round sends the newer one
-          continue
-        }
-        await outbox.del(it.key)
-        this.setPending(it.id, null)
-        if (result === 'drop') this.toast('Couldn’t send one item', 'ph ph-warning', '#ff7a92')
-      }
-    } finally {
-      this.flushing = false
-    }
-    this.failStreak = failed ? this.failStreak + 1 : 0
-    if (failed) this.set({ signal: 'none' })
-    const left = (await outbox.all()).length
-    if (left) this.flushTimer = setTimeout(() => this.flush(), failed ? (this.failStreak > 1 ? 10_000 : 5_000) : 50)
-  }
-
-  private async send(it: OutItem): Promise<'ok' | 'retry' | 'drop'> {
-    const check = (r: { error: { message: string; code?: string } | null; status?: number }) => {
-      if (!r.error) {
-        this.set({ signal: 'ok' })
-        return 'ok' as const
-      }
-      if (isTransient(r.error, r.status)) return 'retry' as const
-      console.error('dropped', it, r.error)
-      return 'drop' as const
-    }
-    if (it.blob) {
-      const path = `${this.state.session!.crewId}/${it.id}.jpg`
-      const up = await supabase.storage.from('photos').upload(path, it.blob, { contentType: 'image/jpeg', upsert: false })
-      if (up.error) {
-        const e = up.error as { message: string; status?: number; code?: string }
-        const exists = e.status === 409 || e.code === 'ResourceAlreadyExists' || /exists|duplicate/i.test(e.message)
-        // Already uploaded on an earlier try: carry on and send the message row.
-        if (!exists) return isTransient(e, e.status) ? 'retry' : 'drop'
-      }
-      const url = supabase.storage.from('photos').getPublicUrl(path).data.publicUrl
-      it = { ...it, row: { ...it.row, photo_url: url } }
-      this.set(s => ({ messages: { ...s.messages, [it.id]: { ...s.messages[it.id], photo_url: url } } }))
-    }
-    if (it.op === 'upsert') return check(await supabase.from(it.table).upsert(it.row, { onConflict: 'id' }))
-    return check(await supabase.from(it.table).update(it.row).eq('id', it.id))
+    this.queueSync()
   }
 
   /** Once a second: friend-near slowdown on your own dot. */
@@ -694,6 +855,10 @@ class Store {
     if (open === 'chat') this.ui({ screen: 'chat', sheet: false, sos: false })
     else if (open === 'find' && member) this.ui({ screen: 'find', findId: member, sheet: false, sos: false })
     else this.ui({ screen: 'map', sheet: false, sos: false })
+  }
+
+  showPhoto(id: string) {
+    this.set(s => ({ photosShown: { ...s.photosShown, [id]: true } }))
   }
 
   /** Tell the crew about a status or note change (shows in chat, notifies). */

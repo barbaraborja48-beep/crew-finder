@@ -3,7 +3,7 @@ import { store, useStore } from '../lib/store'
 import { alive, dotOpacity, dotSize, fraction, nearFriend, remaining } from '../lib/rules'
 import { fmt, glow, hasCloseUp, isLine, ME, placeTitle, TYPES, where, type Place, type PlaceType } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf } from '../lib/view'
-import { Scaled, SyncPill } from '../components/common'
+import { Scaled, SmsFallback, SyncPill } from '../components/common'
 
 const W = 362
 const GROUPS: PlaceType[] = ['stage', 'bar', 'food', 'picnic']
@@ -243,6 +243,9 @@ export function StageScreen() {
           <i aria-hidden className={me ? statusOf(me)[0] : 'ph-fill ph-smiley'} />
           Status
         </button>
+      </div>
+      <div style={{ padding: '10px 20px 0' }}>
+        <SmsFallback />
       </div>
     </div>
   )

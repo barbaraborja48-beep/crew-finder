@@ -22,9 +22,10 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 2. Open `supabase/migrations/20261022174557_crew_finder.sql` from this project, copy everything, paste it in, and click **Run**. You should see "Success". A notice about `pg_cron` is fine.
 3. New query again. Paste `supabase/migrations/20261022174600_seed_elrow.sql` and **Run**.
 4. New query again. Paste `supabase/migrations/20261023120000_map_profile_push.sql` and **Run**. This adds all 8 bars, the picnic areas and food truck shapes, profile editing, chat history and notifications.
-5. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+5. New query again. Paste `supabase/migrations/20261024120000_low_data_sync.sql` and **Run**. This is the low-data sync (one small request per update).
+6. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
 
-> Already ran the first two files before? Just run the third one.
+> Already ran some of these before? Just run the ones you haven't. Each file is safe to run once on top of the previous ones.
 
 > If you'd rather use the terminal: `npx supabase login`, `npx supabase link`, then `npx supabase db push`.
 
@@ -84,6 +85,9 @@ Netlify works the same way: build command `npm run build`, publish folder `dist`
 The Shortcut needs signal. Unlike the app, it can't queue.
 
 ## 9. Before you leave for the festival
+
+- **Everyone: Ajustes → Apps → Mensajes → turn on "Enviar como SMS"** (Settings → Messages → Send as SMS). When there's no data, the app offers to text your spot or your SOS, and this lets iMessage fall back to a normal SMS. Text one or two people individually rather than a group: group texts need data.
+- **Keep Data saver on** (your avatar → Data saver; it's on by default). Instead of a live connection, the app checks for news every minute while it's open, right after you do something, and whenever a notification arrives. In testing that's about 0.1 MB an hour instead of 6.7 MB.
 
 - Everyone opens the Home Screen app **once that day with signal or wifi**. That caches the map and the latest crew state.
 - Test without signal: put the phone in airplane mode, open the app, and tap a spot on a stage. The pill should say **Queued · no signal**. Turn airplane mode off and it flips to **Sent** within seconds.

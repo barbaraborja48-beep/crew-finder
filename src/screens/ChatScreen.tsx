@@ -3,6 +3,7 @@ import { store, useStore, type Message, type State } from '../lib/store'
 import { alive } from '../lib/rules'
 import { ago, ME, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
+import { Freshness } from '../components/common'
 
 type Item =
   | { kind: 'msg'; m: Message; t: number }
@@ -61,6 +62,7 @@ export function ChatScreen() {
           <div style={{ fontSize: 17, fontWeight: 500 }}>{s.crew?.name ?? 'Crew'}</div>
           <div className="kicker">{s.signal === 'none' ? 'No signal · messages queue' : `${active} active`}</div>
         </div>
+        <Freshness />
       </div>
 
       <div className="scroll no-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', gap: 10, padding: '14px 16px' }}>
@@ -139,7 +141,20 @@ export function ChatScreen() {
               )}
               {m.type === 'photo' && (
                 <button onClick={() => store.openPlace(m.place_id)} style={{ width: 210, border: 0, padding: 0, cursor: 'pointer', borderRadius: 18, overflow: 'hidden', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', textAlign: 'left' }}>
-                  {m.localPhoto || m.photo_url ? (
+                  {!isMe && !m.localPhoto && m.photo_url && s.dataSaver && !s.photosShown[m.id] ? (
+                    // Data saver: friends' photos (~30-150 KB each) load only when you tap.
+                    <div
+                      role="button"
+                      onClick={e => {
+                        e.stopPropagation()
+                        store.showPhoto(m.id)
+                      }}
+                      style={{ height: 250, display: 'grid', placeItems: 'center', alignContent: 'center', gap: 6, color: 'var(--color-neutral-400)', fontSize: 12, background: 'radial-gradient(60% 40% at 50% 60%, var(--color-accent-900), var(--color-surface))' }}
+                    >
+                      <i aria-hidden className="ph ph-image" style={{ fontSize: 30 }} />
+                      Photo · tap to load
+                    </div>
+                  ) : m.localPhoto || m.photo_url ? (
                     <img src={m.localPhoto || m.photo_url!} alt="" style={{ display: 'block', width: 210, height: 250, objectFit: 'cover' }} />
                   ) : (
                     <div style={{ height: 250, display: 'grid', placeItems: 'center', color: 'var(--color-neutral-600)', fontSize: 28 }}><i aria-hidden className="ph ph-image" /></div>

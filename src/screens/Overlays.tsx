@@ -3,6 +3,7 @@ import { store, useStore } from '../lib/store'
 import { alive, remaining } from '../lib/rules'
 import { fmt, glow, LASERS, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
+import { smsHref, sosSms } from '../lib/sms'
 import { Avatar, Toggle } from '../components/common'
 import { disablePush, enablePush, loadPrefs, pushState, updatePrefs, type PushPrefs, type PushState } from '../lib/push'
 
@@ -131,6 +132,17 @@ export function ProfileSheet() {
           <Toggle on={me.ghost} onChange={v => store.setGhost(v)} label="Ghost mode" />
         </div>
 
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <i aria-hidden className="ph ph-gauge" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
+          <span style={{ flex: 1, fontSize: 14 }}>
+            Data saver
+            <span style={{ display: 'block', ...label }}>
+              {s.dataSaver ? 'Checks for news every minute and when a notification arrives. Friends’ photos load when you tap.' : 'Live updates. Uses more data and battery.'}
+            </span>
+          </span>
+          <Toggle on={s.dataSaver} onChange={v => store.setDataSaver(v)} label="Data saver" />
+        </div>
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <i aria-hidden className="ph ph-bell-ringing" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
@@ -223,6 +235,9 @@ export function SosScreen() {
     store.ui({ sos: false })
   }
   const safe = store.place('safe')
+  const me = store.me()
+  const mine = store.myDot()
+  const mineLive = alive(mine, Date.now())
   const pct = (p * 100).toFixed(1)
 
   return (
@@ -247,6 +262,17 @@ export function SosScreen() {
           : 'Shares your zone and battery with your crew'}
       </div>
       <div style={{ marginTop: 'auto', paddingBottom: 'calc(var(--safe-bottom) + 24px)', alignSelf: 'stretch', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {sent && (
+          // SMS gets through on signal too weak for data.
+          <a
+            className="btn btn-block"
+            href={smsHref(sosSms({ name: me?.name ?? 'me', where: mineLive ? where(store.place(mine!.place_id), mine!.nx, mine!.ny) : 'location unknown', at: Date.now(), battery: me?.battery }))}
+            style={{ height: 46, color: 'var(--sos-text)', boxShadow: 'inset 0 0 0 1px var(--sos-line)', border: 0 }}
+          >
+            <i aria-hidden className="ph ph-chat-text" />
+            {s.signal === 'none' ? 'No data: send SOS by text message' : 'Also send by text message'}
+          </a>
+        )}
         {safe && (
           <button className="btn btn-secondary btn-block" style={{ height: 46 }} onClick={() => { store.ui({ sos: false }); store.openPlace('safe') }}>
             <i aria-hidden className="ph ph-first-aid" />
