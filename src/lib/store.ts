@@ -9,7 +9,7 @@ import { supabase, ensureAuth, isTransient, configured } from './supabase'
 import { kv, outbox, type OutItem, type Table } from './db'
 import { compressPhoto } from './photo'
 import { alive, nearFriend, nextCheckin, remaining, MAX_REMAINING, type Dot } from './rules'
-import { where, ME, type Place, type PlaceType, type Venue } from './venue'
+import { hasCloseUp, where, ME, STATUS, type Place, type PlaceType, type Venue } from './venue'
 
 // ─── types ────────────────────────────────────────────────────────────────
 
@@ -24,6 +24,7 @@ export interface Member {
   battery: number | null
   ghost: boolean
   last_seen: string
+  created_at?: string
 }
 
 export interface Crew {
@@ -37,9 +38,10 @@ export interface Crew {
 
 export interface Checkin extends Dot {
   crew_id: string
+  created_at?: number // first tap at this spot (born moves forward when you extend)
 }
 
-export type MsgType = 'text' | 'photo' | 'loc' | 'sys' | 'sos'
+export type MsgType = 'text' | 'photo' | 'loc' | 'sys' | 'sos' | 'status'
 export interface Message {
   id: string
   crew_id: string
@@ -51,6 +53,7 @@ export interface Message {
   nx: number | null
   ny: number | null
   born: number
+  to_member?: string | null // pings: who it's for
   localPhoto?: string // object URL while the upload waits
 }
 
@@ -117,7 +120,7 @@ const initial: State = {
     screen: 'map',
     stage: 'brunch',
     heat: 'crew',
-    types: { stage: true, wc: true, bar: false, water: true, medic: true, food: false, open: false },
+    types: { stage: true, wc: true, bar: true, water: true, medic: true, food: true, picnic: true, open: false },
     areaSel: null,
     findId: null,
     sheet: false,
@@ -142,8 +145,14 @@ const toCheckin = (r: Row): Checkin => ({
   born: ms(r.born as string),
   life_s: r.life_s as number,
   taps: r.taps as number,
+  created_at: r.created_at ? ms(r.created_at as string) : undefined,
 })
-const checkinRow = (c: Checkin): Row => ({ ...c, born: iso(c.born) })
+// created_at is set by the server; don't spend bytes sending it.
+const checkinRow = (c: Checkin): Row => {
+  const row: Row = { ...c, born: iso(c.born) }
+  delete row.created_at
+  return row
+}
 const toMessage = (r: Row): Message => ({ ...(r as unknown as Message), born: ms(r.born as string) })
 const withoutLocal = (m: Message) => {
   const rest: Partial<Message> = { ...m }
@@ -219,6 +228,11 @@ class Store {
       pending[it.id] = 'queued'
       if (it.blob && messages[it.id]) messages[it.id] = { ...messages[it.id], localPhoto: URL.createObjectURL(it.blob) }
     }
+
+    // Opened from a notification: jump to the right screen.
+    const q = new URLSearchParams(location.search)
+    const open = q.get('open')
+    if (open) this.openFromNotification(open, q.get('member'))
 
     if (snap?.session) {
       this.set({ ...snap, messages, pending })
@@ -297,7 +311,7 @@ class Store {
   private start() {
     const crewId = this.state.session!.crewId
     this.subscribeRealtime(crewId)
-    this.refresh()
+    this.refresh(true) // venue + places once per launch, so map updates reach installed apps
     this.flush()
     window.addEventListener('online', () => {
       this.flush()
@@ -309,6 +323,14 @@ class Store {
       this.flush()
       if (Date.now() - this.lastRefresh > 10_000) this.refresh()
     })
+    navigator.serviceWorker?.addEventListener('message', e => {
+      if (e.data?.type === 'refresh') this.refresh()
+      if (e.data?.type === 'open') {
+        this.openFromNotification(e.data.open, e.data.member)
+        this.refresh()
+      }
+    })
+    if (new URLSearchParams(location.search).get('open')) history.replaceState(null, '', '/')
     setInterval(() => this.tick(), 1000)
     // Realtime drops a lot on festival signal. Until it's back, poll.
     setInterval(() => {
@@ -349,7 +371,7 @@ class Store {
       supabase.from('crews').select('*').eq('id', crewId).maybeSingle(),
       supabase.from('members').select('*').eq('crew_id', crewId),
       supabase.from('checkins').select('*').eq('crew_id', crewId).gt('born', since).order('born', { ascending: false }).limit(400),
-      supabase.from('messages').select('*').eq('crew_id', crewId).order('born', { ascending: false }).limit(150),
+      supabase.from('messages').select('*').eq('crew_id', crewId).order('born', { ascending: false }).limit(300),
     ])
     const failed = [crew, members, checkins, messages].find(r => r.error)
     if (failed) {
@@ -367,7 +389,7 @@ class Store {
       const venueId = (crew.data as Crew).venue_id
       const [v, p] = await Promise.all([
         supabase.from('venues').select('*').eq('id', venueId).single(),
-        supabase.from('places').select('id,type,name,near,n,x,y').eq('venue_id', venueId),
+        supabase.from('places').select('id,type,name,near,n,x,y,shape').eq('venue_id', venueId),
       ])
       if (v.data && p.data) this.set({ venue: v.data as Venue, places: p.data as Place[] })
     }
@@ -547,7 +569,7 @@ class Store {
     const mine = this.myDot()
     const near = nearFriend(this.friendDots(), placeId, nx, ny, now)
     const { dot, merged } = nextCheckin(mine, placeId, nx, ny, now, !!near, extendAnywhere, uuid)
-    const row: Checkin = { ...dot, member_id: me.id, crew_id: s.session.crewId }
+    const row: Checkin = { ...dot, member_id: me.id, crew_id: s.session.crewId, created_at: merged ? (mine?.created_at ?? now) : now }
     const msg = merged ? `+1:00${near ? ` · +0:30 ${near.name} near` : ''}` : `${where(this.place(placeId), nx, ny)}${near ? ` · ${near.name} near` : ''}`
     this.slowBonus = 0
 
@@ -578,6 +600,7 @@ class Store {
     const s = this.state
     const mine = this.myDot()
     this.updateMe({ ghost: on })
+    this.addMessage({ type: 'status', text: on ? 'went ghost' : 'is back from ghost mode' })
     if (on) {
       if (mine && alive(mine, Date.now())) this.set({ ghostDot: mine })
       this.toast('Ghost on · nothing is shared', 'ph ph-ghost', 'var(--color-neutral-400)')
@@ -639,7 +662,7 @@ class Store {
   ping(member: Member) {
     const me = this.me()
     if (!me) return
-    this.addMessage({ type: 'sys', text: `${me.name} pinged ${member.name}` })
+    this.addMessage({ type: 'sys', text: `${me.name} pinged ${member.name}`, to_member: member.id })
     if (this.state.signal === 'none') this.toast(`Ping queued for ${member.name}`, 'ph ph-clock', member.color)
     else this.toast(`Pinged ${member.name}`, 'ph ph-hand-waving', member.color)
   }
@@ -667,11 +690,24 @@ class Store {
     this.enqueue('crews', 'update', s.crew.id, patch)
   }
 
+  openFromNotification(open: string, member?: string | null) {
+    if (open === 'chat') this.ui({ screen: 'chat', sheet: false, sos: false })
+    else if (open === 'find' && member) this.ui({ screen: 'find', findId: member, sheet: false, sos: false })
+    else this.ui({ screen: 'map', sheet: false, sos: false })
+  }
+
+  /** Tell the crew about a status or note change (shows in chat, notifies). */
+  postStatus() {
+    const me = this.me()
+    if (!me) return
+    this.addMessage({ type: 'status', text: `${STATUS[me.status]?.[1] ?? 'Vibing'}${me.note ? ` · “${me.note}”` : ''}` })
+  }
+
   /** Jump to wherever a place lives: stages open the floor, areas open their card. */
   openPlace(id: string | null) {
     const p = this.place(id)
     if (!p) return
-    if (p.type === 'stage') this.ui({ screen: 'stage', stage: p.id, areaSel: null })
+    if (hasCloseUp(p)) this.ui({ screen: 'stage', stage: p.id, areaSel: null })
     else this.ui({ screen: 'map', areaSel: p.id, types: { ...this.state.ui.types, [p.type]: true } })
   }
 }

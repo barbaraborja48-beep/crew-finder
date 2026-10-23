@@ -19,7 +19,7 @@ function Copy({ label, value, mono = true }: { label: string; value: string; mon
         style={{ border: 0, cursor: 'pointer', textAlign: 'left', borderRadius: 'var(--radius-md)', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', padding: '10px 12px', display: 'flex', gap: 10, alignItems: 'center' }}
       >
         <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontFamily: mono ? 'ui-monospace, Menlo, monospace' : undefined, color: 'var(--color-neutral-200)', overflowWrap: 'anywhere', userSelect: 'all', WebkitUserSelect: 'all' }}>{value}</span>
-        <i className="ph ph-copy" style={{ color: 'var(--color-accent-300)' }} />
+        <i aria-hidden className="ph ph-copy" style={{ color: 'var(--color-accent-300)' }} />
       </button>
     </div>
   )
@@ -72,7 +72,7 @@ export function ShortcutScreen() {
     <div className="screen scroll no-scrollbar" style={{ padding: 'var(--hdr-top) 20px calc(var(--tabbar-h) + 24px)', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="round" aria-label="Back" onClick={() => store.ui({ screen: 'crew' })}>
-          <i className="ph ph-caret-left" />
+          <i aria-hidden className="ph ph-caret-left" />
         </button>
         <div>
           <div className="kicker">iPhone Shortcut</div>
@@ -104,7 +104,7 @@ export function ShortcutScreen() {
       <Step n={7}>Long-press your Home Screen → <b>+</b> → Shortcuts widget, or Settings → Accessibility → Touch → Back Tap.</Step>
 
       <button className="btn btn-primary" style={{ height: 44 }} disabled={!secret} onClick={runTest}>
-        <i className="ph ph-lightning" />
+        <i aria-hidden className="ph ph-lightning" />
         Test it from here
       </button>
       {test && <div style={{ fontSize: 13, color: 'var(--color-neutral-300)', textAlign: 'center' }}>{test}</div>}

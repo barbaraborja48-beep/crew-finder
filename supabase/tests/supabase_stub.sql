@@ -17,3 +17,12 @@ alter default privileges in schema public grant all on tables to anon, authentic
 alter default privileges in schema public grant all on functions to anon, authenticated;
 do $$ begin create role authenticator login noinherit; exception when duplicate_object then null; end $$;
 grant anon, authenticated to authenticator;
+-- Fake pg_net: record outgoing calls instead of making them.
+create schema if not exists net;
+create table net.calls (id serial, url text, body jsonb, headers jsonb);
+create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000)
+returns bigint language sql as $$ insert into net.calls (url, body, headers) values (url, body, headers) returning id::bigint $$;
+do $$ begin create role service_role nologin bypassrls; exception when duplicate_object then null; end $$;
+grant service_role to authenticator;
+grant usage on schema public to service_role;
+alter default privileges in schema public grant all on tables to service_role;

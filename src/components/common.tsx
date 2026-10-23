@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { store, useStore, type Screen } from '../lib/store'
 import { alive } from '../lib/rules'
+import { hasCloseUp } from '../lib/venue'
 import type { SyncDef } from '../lib/view'
 
 /** Lays out children at a fixed design size (e.g. 390×346) and scales to the phone's width. */
@@ -25,7 +26,7 @@ export function Scaled({ w, h, children, style, innerRef }: { w: number; h: numb
 export function SyncPill({ sync }: { sync: SyncDef }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999, fontSize: 11, boxShadow: sync.ring, color: sync.fg, whiteSpace: 'nowrap' }}>
-      <i className={sync.icon} />
+      <i aria-hidden className={sync.icon} />
       {sync.label}
     </div>
   )
@@ -68,11 +69,11 @@ export function TabBar() {
           style={{ color: screen === k ? 'var(--color-accent-200)' : 'var(--color-neutral-500)' }}
           onClick={() => {
             const mine = store.myDot()
-            const onStage = mine && alive(mine, Date.now()) && store.place(mine.place_id)?.type === 'stage'
+            const onStage = mine && alive(mine, Date.now()) && hasCloseUp(store.place(mine.place_id))
             store.ui({ screen: k, areaSel: null, stage: k === 'stage' && onStage ? mine.place_id : s.ui.stage })
           }}
         >
-          <i className={icon} style={{ fontSize: 22 }} />
+          <i aria-hidden className={icon} style={{ fontSize: 22 }} />
           {label}
         </button>
       ))}
@@ -85,24 +86,28 @@ export function Toast() {
   if (!toast) return null
   return (
     <div key={toast.key} className="toast" role="status">
-      <i className={toast.icon} style={{ color: toast.fg }} />
+      <i aria-hidden className={toast.icon} style={{ color: toast.fg }} />
       {toast.text}
     </div>
   )
 }
 
-export function SosButton() {
+export function Avatar({ name, color, size = 40 }: { name: string; color: string; size?: number }) {
   return (
-    <button
-      aria-label="SOS"
-      onClick={() => store.ui({ sos: true, sheet: false })}
-      style={{
-        width: 40, height: 40, border: 0, cursor: 'pointer', borderRadius: '50%', flex: 'none',
-        background: 'color-mix(in srgb, #ff3b5c 12%, transparent)', boxShadow: 'inset 0 0 0 1px var(--sos-line)',
-        color: 'var(--sos-text)', display: 'grid', placeItems: 'center', fontSize: 18,
-      }}
-    >
-      <i className="ph-bold ph-siren" />
+    <span style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: `color-mix(in srgb, ${color} 12%, var(--color-surface))`, boxShadow: `inset 0 0 0 1.5px ${color}, 0 0 12px -2px ${color}`, color, display: 'grid', placeItems: 'center', font: `500 ${Math.round(size * 0.42)}px var(--font-body)` }}>
+      {(name.trim()[0] ?? '?').toUpperCase()}
+    </span>
+  )
+}
+
+/** Top-right: you. Opens your profile (name, color, status, notifications, SOS). */
+export function ProfileButton() {
+  const s = useStore()
+  const me = s.members.find(m => m.id === s.session?.memberId)
+  if (!me) return null
+  return (
+    <button aria-label="Your profile" onClick={() => store.ui({ sheet: true })} style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: '50%' }}>
+      <Avatar name={me.name} color={me.color} />
     </button>
   )
 }

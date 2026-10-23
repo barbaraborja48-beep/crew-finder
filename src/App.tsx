@@ -6,7 +6,7 @@ import { StageScreen } from './screens/StageScreen'
 import { ChatScreen } from './screens/ChatScreen'
 import { CrewScreen, FindScreen } from './screens/CrewScreen'
 import { ShortcutScreen } from './screens/ShortcutScreen'
-import { SosScreen, StatusSheet } from './screens/Overlays'
+import { ProfileSheet, SosScreen } from './screens/Overlays'
 import { Join, Unconfigured, Welcome } from './screens/Onboarding'
 
 export default function App() {
@@ -30,7 +30,7 @@ export default function App() {
           {screen === 'shortcut' && <ShortcutScreen />}
           {screen === 'find' && <FindScreen />}
           {screen !== 'find' && <TabBar />}
-          <StatusSheet key={String(s.ui.sheet)} />
+          <ProfileSheet key={String(s.ui.sheet)} />
           <SosScreen />
         </>
       )}

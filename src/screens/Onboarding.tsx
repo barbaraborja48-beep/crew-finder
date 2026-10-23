@@ -153,7 +153,7 @@ export function Join() {
               }
             }}
           >
-            <i className="ph ph-link" />
+            <i aria-hidden className="ph ph-link" />
             Copy invite link
           </button>
         </>

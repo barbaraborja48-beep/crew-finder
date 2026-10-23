@@ -31,7 +31,7 @@ export function CrewScreen() {
 
       {isIOS() && !isStandalone() && (
         <div style={{ borderRadius: 'var(--radius-lg)', boxShadow: '0 0 0 1px #ffc83b88', padding: '12px 14px', fontSize: 12, color: 'var(--queued)', display: 'flex', gap: 10 }}>
-          <i className="ph ph-export" style={{ fontSize: 18 }} />
+          <i aria-hidden className="ph ph-export" style={{ fontSize: 18 }} />
           <span>Add this to your Home Screen: tap Share, then “Add to Home Screen”. Open it from there and join again with the same name.</span>
         </div>
       )}
@@ -55,7 +55,7 @@ export function CrewScreen() {
               <span style={{ fontSize: 12, color: 'var(--color-neutral-300)', fontVariantNumeric: 'tabular-nums' }}>{r.member.ghost ? '' : ageLabel(r.ageS)}</span>
               {r.member.battery != null && !r.member.ghost && (
                 <span style={{ fontSize: 10, color: 'var(--color-neutral-500)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                  <i className={r.member.battery < 20 ? 'ph ph-battery-low' : 'ph ph-battery-medium'} />
+                  <i aria-hidden className={r.member.battery < 20 ? 'ph ph-battery-low' : 'ph ph-battery-medium'} />
                   {r.member.battery}%
                 </span>
               )}
@@ -67,7 +67,7 @@ export function CrewScreen() {
 
       <div style={{ borderRadius: 'var(--radius-lg)', boxShadow: '0 0 0 1px var(--color-accent-700)', background: 'var(--color-accent-900)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <button onClick={() => (editMeet ? setEditMeet(false) : store.openPlace(meet?.id ?? null))} style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
-          <i className="ph-fill ph-flag" style={{ fontSize: 18, color: 'var(--color-accent-200)' }} />
+          <i aria-hidden className="ph-fill ph-flag" style={{ fontSize: 18, color: 'var(--color-accent-200)' }} />
           <span style={{ flex: 1 }}>
             <span style={{ display: 'block', fontSize: 13, fontWeight: 500 }}>Meet spot</span>
             <span style={{ display: 'block', fontSize: 11, color: 'var(--color-accent-300)' }}>
@@ -101,7 +101,7 @@ export function CrewScreen() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 2px' }}>
-        <i className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
+        <i aria-hidden className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
         <span style={{ flex: 1, fontSize: 14 }}>
           Ghost mode
           <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>Your check-ins stay on your phone</span>
@@ -111,11 +111,11 @@ export function CrewScreen() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button className="btn btn-primary" style={{ height: 44 }} onClick={share}>
-          <i className="ph ph-user-plus" />
+          <i aria-hidden className="ph ph-user-plus" />
           Invite friends
         </button>
         <button className="btn btn-secondary" style={{ height: 44 }} onClick={() => store.ui({ screen: 'shortcut' })}>
-          <i className="ph ph-lightning" />
+          <i aria-hidden className="ph ph-lightning" />
           One-tap check-in for iPhone
         </button>
       </div>
@@ -153,7 +153,7 @@ export function FindScreen() {
     <div className="screen scroll no-scrollbar" style={{ alignItems: 'center' }}>
       <div style={{ alignSelf: 'stretch', padding: 'var(--hdr-top) 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button className="round" aria-label="Close" onClick={() => store.ui({ screen: 'crew' })}>
-          <i className="ph ph-x" />
+          <i aria-hidden className="ph ph-x" />
         </button>
         <span style={{ fontSize: 15, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ width: 10, height: 10, borderRadius: '50%', background: c, boxShadow: `0 0 8px ${c}` }} />
@@ -162,7 +162,7 @@ export function FindScreen() {
         <span style={{ width: 36 }} />
       </div>
       <div style={{ fontSize: 11, color: 'var(--color-neutral-400)', display: 'flex', alignItems: 'center', gap: 5 }}>
-        <i className="ph ph-clock-counter-clockwise" />
+        <i aria-hidden className="ph ph-clock-counter-clockwise" />
         Last check-in
       </div>
 
@@ -186,11 +186,11 @@ export function FindScreen() {
 
       <div style={{ marginTop: 'auto', alignSelf: 'stretch', padding: '24px 20px calc(var(--safe-bottom) + 24px)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <button className="btn btn-secondary" style={{ height: 46 }} disabled={!pl} onClick={() => pl && store.openPlace(pl.id)}>
-          <i className="ph ph-map-pin" />
+          <i aria-hidden className="ph ph-map-pin" />
           {isArea ? 'Show on map' : 'Go to stage'}
         </button>
         <button className="btn btn-primary" style={{ height: 46 }} onClick={() => store.ping(r.member)}>
-          <i className="ph ph-hand-waving" />
+          <i aria-hidden className="ph ph-hand-waving" />
           Ping
         </button>
       </div>

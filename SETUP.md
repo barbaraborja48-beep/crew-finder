@@ -21,7 +21,10 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 1. In the left sidebar, open **SQL Editor** and click **New query**.
 2. Open `supabase/migrations/20261022174557_crew_finder.sql` from this project, copy everything, paste it in, and click **Run**. You should see "Success". A notice about `pg_cron` is fine.
 3. New query again. Paste `supabase/migrations/20261022174600_seed_elrow.sql` and **Run**.
-4. Check it worked: open **Table Editor** → `places`. You should see 23 rows (elrow, Brunch!, WC, Bar…).
+4. New query again. Paste `supabase/migrations/20261023120000_map_profile_push.sql` and **Run**. This adds all 8 bars, the picnic areas and food truck shapes, profile editing, chat history and notifications.
+5. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+
+> Already ran the first two files before? Just run the third one.
 
 > If you'd rather use the terminal: `npx supabase login`, `npx supabase link`, then `npx supabase db push`.
 
@@ -87,7 +90,23 @@ The Shortcut needs signal. Unlike the app, it can't queue.
 - Agree on the meet spot (Crew tab, default is Picnic by La Plaza, on the hour).
 - Low Power Mode is fine.
 
-## 10. After the event
+## 10. Turn on notifications (15 min, once)
+
+The app can buzz your friends' phones when someone checks in somewhere new, changes status, pings, sends an SOS, or writes in chat. This needs a small server function on Supabase.
+
+1. In Supabase, open **Edge Functions** in the left sidebar.
+2. Click **Deploy a new function** → **Via Editor**.
+3. Name it exactly `push`.
+4. Delete the sample code. Open [supabase/functions/push/index.ts](https://github.com/barbaraborja48-beep/crew-finder/blob/main/supabase/functions/push/index.ts) on GitHub, click **Copy raw file**, and paste it in.
+5. Click **Deploy** and wait for it to finish.
+6. Open the function's settings (**Details** tab) and switch **off** the option to verify/enforce JWT. Save. The database calls this function directly, so it checks its own secret instead.
+7. Test it: open `https://ryqtifsfmhfzrgkrbxlm.supabase.co/functions/v1/push` in your browser. You should see `{"publicKey":"B…"}`. That means it works and has made its own keys.
+
+**On each phone** (it has to be the Home Screen app, not Safari): tap your avatar at the top right → switch on **Notifications** → **Allow**. You can mute check-ins or chat there. SOS and pings always come through.
+
+If nothing arrives: in Supabase go to **Database → Extensions** and check that **pg_net** is on.
+
+## 11. After the event
 
 Crew data deletes itself **48 hours after 02:00 on 1 Nov**. A scheduled job does this if `pg_cron` was available, and you can check under **Integrations → Cron** for `purge-old-crews`. If it isn't there, run this in the SQL Editor on 3 Nov:
 
@@ -101,7 +120,7 @@ Photos live separately: **Storage → photos**, select all, delete.
 
 ## What to expect (honest limits)
 
-- **Nothing updates while the app is closed.** iPhones freeze web apps in the background, so open the app to see where people are. There are no push notifications in this version, so a Ping or SOS shows up in chat the next time your friends open the app.
+- **The map only updates while the app is open.** iPhones freeze web apps in the background. Notifications (step 10) still arrive with the app closed, as long as that phone has some signal, and tapping one opens the app on the right screen.
 - **Live updates** come over a realtime connection. When that drops (it will, at a festival), the app checks for news every 15 seconds while it's open.
 - **Battery %** only shows for Android friends. iPhone Safari doesn't share it.
 - **SOS** goes to your crew only. It also points you to the Safe Space on the map. It does not contact festival staff.

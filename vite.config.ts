@@ -26,6 +26,7 @@ export default defineConfig({
         // App shell, icon fonts and the venue map all load with zero signal.
         globPatterns: ['**/*.{js,css,html,woff2,webp,png}'],
         navigateFallback: '/index.html',
+        importScripts: ['/push-sw.js'], // notification handling (public/push-sw.js)
         runtimeCaching: [
           {
             // Crew photos: once seen, keep them.

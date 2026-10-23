@@ -1,29 +1,30 @@
 import { useRef, useState } from 'react'
 import { store, useStore, type Message, type State } from '../lib/store'
 import { alive } from '../lib/rules'
-import { ago, ME, where } from '../lib/venue'
+import { ago, ME, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
 
 type Item =
   | { kind: 'msg'; m: Message; t: number }
   | { kind: 'move'; id: string; memberId: string; placeId: string; nx: number; ny: number; t: number }
+  | { kind: 'join'; memberId: string; t: number }
 
-/** Messages plus "Leo → Bar · by La Plaza" lines made from friends' check-ins. */
+/** The crew's whole night in one feed: messages, every check-in (yours too), joins, status changes. */
 function timeline(s: State): Item[] {
   const items: Item[] = Object.values(s.messages).map(m => ({ kind: 'msg', m, t: m.born }))
-  const byMember = new Map<string, { place_id: string; born: number; id: string; nx: number; ny: number }[]>()
   for (const c of Object.values(s.checkins)) {
-    if (c.member_id === s.session?.memberId) continue
-    byMember.set(c.member_id, [...(byMember.get(c.member_id) ?? []), c])
+    // A check-in row keeps its id when you extend it, so date it by the first tap.
+    items.push({ kind: 'move', id: c.id, memberId: c.member_id, placeId: c.place_id, nx: c.nx, ny: c.ny, t: c.created_at ?? c.born })
   }
-  for (const [memberId, list] of byMember) {
-    list.sort((a, b) => a.born - b.born)
-    list.forEach((c, i) => {
-      if (i > 0 && list[i - 1].place_id !== c.place_id) items.push({ kind: 'move', id: c.id, memberId, placeId: c.place_id, nx: c.nx, ny: c.ny, t: c.born })
-    })
-  }
-  return items.sort((a, b) => a.t - b.t).slice(-200)
+  for (const m of s.members) if (m.created_at) items.push({ kind: 'join', memberId: m.id, t: new Date(m.created_at).getTime() })
+  return items.sort((a, b) => a.t - b.t).slice(-300)
 }
+
+/** "now", "4m", then clock time for anything older than an hour. */
+const stamp = (t: number, now: number) =>
+  now - t < 3600_000 ? ago((now - t) / 1000) : new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+const sysLine: React.CSSProperties = { alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-500)', padding: '2px 0', textAlign: 'center', fontFamily: 'var(--font-body)' }
 
 const QUICK = ['Where are you?', 'On my way', 'At meet spot', 'Need water']
 
@@ -64,13 +65,21 @@ export function ChatScreen() {
 
       <div className="scroll no-scrollbar" style={{ flex: 1, display: 'flex', flexDirection: 'column-reverse', gap: 10, padding: '14px 16px' }}>
         {[...items].reverse().map((it, idx, arr) => {
+          if (it.kind === 'join') {
+            return (
+              <div key={'join' + it.memberId} style={{ ...sysLine }}>
+                <i aria-hidden className="ph ph-user-plus" style={{ color: colorOf(it.memberId) }} />
+                {nameOf(it.memberId)} {it.memberId === meId ? 'joined' : 'joined the crew'} · {stamp(it.t, now)}
+              </div>
+            )
+          }
           if (it.kind === 'move') {
             const c = colorOf(it.memberId)
             return (
-              <div key={'mv' + it.id + it.t} style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-500)', padding: '2px 0', textAlign: 'center' }}>
+              <button key={'mv' + it.id} onClick={() => store.openPlace(it.placeId)} style={{ ...sysLine, border: 0, background: 'transparent', cursor: 'pointer' }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: c, boxShadow: `0 0 5px ${c}`, flex: 'none' }} />
-                {nameOf(it.memberId)} → {where(store.place(it.placeId), it.nx, it.ny)} · {ago((now - it.t) / 1000)}
-              </div>
+                {nameOf(it.memberId)} → {where(store.place(it.placeId), it.nx, it.ny)} · {stamp(it.t, now)}
+              </button>
             )
           }
           const m = it.m
@@ -78,21 +87,33 @@ export function ChatScreen() {
           const color = colorOf(m.member_id)
           if (m.type === 'sys') {
             return (
-              <div key={m.id} style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-500)' }}>
-                <i className="ph ph-hand-waving" style={{ color }} />
-                {m.text} · {ago((now - m.born) / 1000)}
+              <div key={m.id} style={sysLine}>
+                <i aria-hidden className="ph ph-hand-waving" style={{ color }} />
+                {m.text} · {stamp(m.born, now)}
+              </div>
+            )
+          }
+          if (m.type === 'status') {
+            const ghost = /ghost/.test(m.text)
+            const icon = ghost ? 'ph ph-ghost' : STATUS.find(([, l]) => m.text.startsWith(l))?.[0] ?? 'ph-fill ph-smiley'
+            return (
+              <div key={m.id} style={sysLine}>
+                <i aria-hidden className={icon} style={{ color }} />
+                {nameOf(m.member_id)}
+                {ghost ? ' ' : ' · '}
+                {m.text} · {stamp(m.born, now)}
               </div>
             )
           }
           if (m.type === 'sos') {
             return (
               <button key={m.id} onClick={() => store.openPlace(m.place_id)} style={{ alignSelf: 'stretch', border: 0, cursor: 'pointer', borderRadius: 18, padding: '12px 14px', textAlign: 'left', background: 'color-mix(in srgb, #ff3b5c 12%, var(--color-surface))', boxShadow: 'inset 0 0 0 1px var(--sos-line)', color: 'var(--color-text)', display: 'flex', gap: 10, alignItems: 'center' }}>
-                <i className="ph-bold ph-siren" style={{ fontSize: 22, color: 'var(--sos-text)' }} />
+                <i aria-hidden className="ph-bold ph-siren" style={{ fontSize: 22, color: 'var(--sos-text)' }} />
                 <span style={{ flex: 1 }}>
                   <span style={{ display: 'block', fontSize: 14, fontWeight: 500 }}>{nameOf(m.member_id)} sent an SOS</span>
                   <span style={{ display: 'block', fontSize: 12, color: 'var(--sos-text)' }}>{m.text.replace(/^SOS · /, '')}</span>
                 </span>
-                <span className="kicker">{ago((now - m.born) / 1000)}</span>
+                <span className="kicker">{stamp(m.born, now)}</span>
               </button>
             )
           }
@@ -121,10 +142,10 @@ export function ChatScreen() {
                   {m.localPhoto || m.photo_url ? (
                     <img src={m.localPhoto || m.photo_url!} alt="" style={{ display: 'block', width: 210, height: 250, objectFit: 'cover' }} />
                   ) : (
-                    <div style={{ height: 250, display: 'grid', placeItems: 'center', color: 'var(--color-neutral-600)', fontSize: 28 }}><i className="ph ph-image" /></div>
+                    <div style={{ height: 250, display: 'grid', placeItems: 'center', color: 'var(--color-neutral-600)', fontSize: 28 }}><i aria-hidden className="ph ph-image" /></div>
                   )}
                   <div style={{ padding: '8px 11px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-neutral-300)' }}>
-                    <i className="ph-fill ph-map-pin" style={{ color }} />
+                    <i aria-hidden className="ph-fill ph-map-pin" style={{ color }} />
                     {placeLabel}
                   </div>
                 </button>
@@ -142,7 +163,7 @@ export function ChatScreen() {
               )}
               {isMe && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, padding: '0 4px', color: !pend ? 'var(--color-neutral-500)' : pend === 'sending' ? '#bff9ff' : 'var(--queued)' }}>
-                  <i className={!pend ? 'ph-bold ph-check' : pend === 'sending' ? 'ph ph-arrow-up' : 'ph ph-clock'} />
+                  <i aria-hidden className={!pend ? 'ph-bold ph-check' : pend === 'sending' ? 'ph ph-arrow-up' : 'ph ph-clock'} />
                   {syncLabel}
                 </div>
               )}
@@ -172,10 +193,10 @@ export function ChatScreen() {
           }}
         />
         <button aria-label="Send photo" onClick={() => fileRef.current?.click()} style={{ width: 38, height: 38, flex: 'none', border: 0, cursor: 'pointer', borderRadius: '50%', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', color: 'var(--color-neutral-200)', fontSize: 18, display: 'grid', placeItems: 'center' }}>
-          <i className="ph ph-camera" />
+          <i aria-hidden className="ph ph-camera" />
         </button>
         <button aria-label="Share my location" onClick={() => store.sendLocation()} style={{ width: 38, height: 38, flex: 'none', border: 0, cursor: 'pointer', borderRadius: '50%', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', color: ME, fontSize: 18, display: 'grid', placeItems: 'center' }}>
-          <i className="ph ph-map-pin" />
+          <i aria-hidden className="ph ph-map-pin" />
         </button>
         <form
           onSubmit={e => {
@@ -186,7 +207,7 @@ export function ChatScreen() {
         >
           <input value={text} maxLength={500} onChange={e => setText(e.target.value)} placeholder="Message" enterKeyHint="send" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--color-text)', font: '400 14px var(--font-body)' }} />
           <button type="submit" aria-label="Send" style={{ width: 30, height: 30, border: 0, cursor: 'pointer', borderRadius: '50%', background: 'var(--color-accent-800)', color: 'var(--color-accent-100)', display: 'grid', placeItems: 'center', fontSize: 14 }}>
-            <i className="ph-bold ph-arrow-up" />
+            <i aria-hidden className="ph-bold ph-arrow-up" />
           </button>
         </form>
       </div>

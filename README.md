@@ -2,7 +2,7 @@
 
 A private web app for a small friend group (4 to 12 people) to find each other at a festival with bad signal. Built from the "Crew Finder" design handoff, first target **Elrow Halloween Takeover, Recinto Iberdrola Music, Madrid, 31.10.26**.
 
-Tap where you are on the venue map or a stage floor. Your dot glows in your laser color and fades over 2:30. Tap again nearby to extend it, and get bonus time when a friend is close. Everything queues offline and sends the moment there's any signal. There's also crew chat with location cards and photos, status and notes, ghost mode, SOS, and an iOS Shortcut for one-tap check-ins.
+Tap where you are on the venue map or a stage floor. Your dot glows in your laser color and fades over 2:30. Tap again nearby to extend it, and get bonus time when a friend is close. Everything queues offline and sends the moment there's any signal. Bars, food trucks and picnic areas have their own close-ups drawn to their real shape and size. There's also a crew chat that doubles as the night's history (every check-in, status change and join), a profile with name, color, status and notes, ghost mode, SOS, push notifications, and an iOS Shortcut for one-tap check-ins.
 
 **To get it running, follow [SETUP.md](SETUP.md).**
 
@@ -22,7 +22,10 @@ Tap where you are on the venue map or a stage floor. Your dot glows in your lase
 | Photo compression (≤1280 px, JPEG q0.6, ~150 KB) | `src/lib/photo.ts` |
 | Screens: Map, Check in (stage floor), Chat, Crew, Find, Status sheet, SOS, Shortcut setup, onboarding | `src/screens/` |
 | Schema, RLS, RPCs (`create_crew`, `crew_preview`, `join_crew`, `quick_checkin`, `purge_old_crews`), storage bucket, cron | `supabase/migrations/…_crew_finder.sql` |
-| Elrow venue + 23 places (image-pixel coords on a 1214×1520 map) | `supabase/migrations/…_seed_elrow.sql`, `public/assets/elrow-map.webp` |
+| Elrow venue + places (image-pixel coords on a 1214×1520 map) | `supabase/migrations/…_seed_elrow.sql`, `public/assets/elrow-map.webp` |
+| All 8 bars, picnic areas, food truck row with real shapes; profile rules; chat history; push tables + trigger | `supabase/migrations/…_map_profile_push.sql` |
+| Push sender (Web Push, VAPID keys made on first use, hook secret) | `supabase/functions/push/index.ts` |
+| Notification display + tap-to-open | `public/push-sw.js`, `src/lib/push.ts` |
 
 ### Privacy model
 
@@ -42,8 +45,8 @@ npm test                     # check-in rule tests
 npm run build                # production build + service worker
 ```
 
-`supabase/tests/` has a SQL test of every RLS policy and RPC. It runs on plain Postgres: load `supabase_stub.sql`, then both migrations, then `rls_and_rpc.sql`. Seven `ERROR` lines are expected, and each one is a blocked action.
+`supabase/tests/` has a SQL test of every RLS policy and RPC. It runs on plain Postgres: load `supabase_stub.sql`, then all migrations, then `rls_and_rpc.sql` (seven `ERROR` lines expected, each a blocked action) or `push_and_profile.sql` (five expected).
 
 ## Not in the web version
 
-Bluetooth proximity, UWB precision arrow, interactive WidgetKit widgets and Live Activities need a native SwiftUI app (see the design handoff, "Native later"). Venue setup (upload a map, place pins) is also not built yet, because Elrow ships with seeded places.
+Background location, Bluetooth proximity, UWB precision arrow, interactive WidgetKit widgets and Live Activities need a native SwiftUI app (see the design handoff, "Native later"). Venue setup (upload a map, place pins) is also not built yet, because Elrow ships with seeded places.

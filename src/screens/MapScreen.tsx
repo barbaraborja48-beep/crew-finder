@@ -1,9 +1,9 @@
 import { store, useStore } from '../lib/store'
 import { alive } from '../lib/rules'
-import { glow, mapPos, toMap, TYPES, MAP_W, MAP_H, ME, type PlaceType } from '../lib/venue'
+import { glow, hasCloseUp, mapPos, outline, toMap, TYPES, MAP_W, MAP_H, ME, type PlaceType } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
-import { Scaled, SyncPill, SosButton } from '../components/common'
+import { ProfileButton, Scaled, SyncPill } from '../components/common'
 
 export function MapScreen() {
   const s = useStore()
@@ -40,7 +40,7 @@ export function MapScreen() {
           <div className="kicker">{v?.name ?? s.crew?.name}</div>
           <div className="title">{v?.event_name || s.crew?.name}</div>
         </div>
-        <SosButton />
+        <ProfileButton />
       </div>
       <div style={{ padding: '0 20px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', background: 'var(--color-surface)' }}>
@@ -70,6 +70,22 @@ export function MapScreen() {
             ))}
           </div>
         )}
+        {v && (
+          // Bars, the food truck row and picnic areas at their real size and angle. Tap for a close-up.
+          <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+            {areas.filter(a => a.shape).map(a => {
+              const here = (meLive && mine!.place_id === a.id) || liveFriends.some(r => r.dot!.place_id === a.id)
+              return (
+                <polygon
+                  key={a.id}
+                  points={outline(v, a.shape!).map(p => `${p.x},${p.y}`).join(' ')}
+                  onClick={() => store.ui({ stage: a.id, screen: 'stage', areaSel: null })}
+                  style={{ cursor: 'pointer', fill: here ? 'color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'color-mix(in srgb, var(--color-accent) 14%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 70%, transparent)', strokeWidth: 1, strokeDasharray: a.type === 'bar' ? undefined : '3 2' }}
+                />
+              )
+            })}
+          </svg>
+        )}
         {v && ui.types.stage &&
           stages.map(st => {
             const p = toMap(v, st.x, st.y)
@@ -97,7 +113,7 @@ export function MapScreen() {
               <button
                 key={a.id}
                 aria-label={a.name}
-                onClick={() => store.ui({ areaSel: on ? null : a.id })}
+                onClick={() => (hasCloseUp(a) ? store.ui({ stage: a.id, screen: 'stage', areaSel: null }) : store.ui({ areaSel: on ? null : a.id }))}
                 style={{
                   position: 'absolute', left: p.x, top: p.y, transform: 'translate(-50%,-50%)', width: 24, height: 24, border: 0, cursor: 'pointer', borderRadius: '50%', padding: 0, zIndex: 2,
                   background: on ? 'var(--color-accent-800)' : 'var(--color-surface)', color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-200)',
@@ -105,7 +121,7 @@ export function MapScreen() {
                   display: 'grid', placeItems: 'center', fontSize: 13,
                 }}
               >
-                <i className={TYPES[a.type][1]} />
+                <i aria-hidden className={TYPES[a.type][1]} />
               </button>
             )
           })}
@@ -122,7 +138,7 @@ export function MapScreen() {
                   boxShadow: on ? '0 0 0 1px var(--color-accent-600)' : 'var(--shadow-sm)', display: 'flex', alignItems: 'center', gap: 4, backdropFilter: 'blur(8px)',
                 }}
               >
-                <i className={icon} style={{ fontSize: 12 }} />
+                <i aria-hidden className={icon} style={{ fontSize: 12 }} />
                 {label}
               </button>
             )
@@ -167,7 +183,7 @@ export function MapScreen() {
               <span style={{ display: 'block', fontSize: 14, fontWeight: 500 }}>{r.member.name}</span>
               <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{r.where}</span>
             </span>
-            <i className={r.member.ghost ? 'ph ph-ghost' : statusOf(r.member)[0]} style={{ color: 'var(--color-neutral-400)', fontSize: 15 }} />
+            <i aria-hidden className={r.member.ghost ? 'ph ph-ghost' : statusOf(r.member)[0]} style={{ color: 'var(--color-neutral-400)', fontSize: 15 }} />
             <span style={{ width: 34, textAlign: 'right', fontSize: 11, color: 'var(--color-neutral-400)', fontVariantNumeric: 'tabular-nums' }}>{ageLabel(r.ageS)}</span>
           </button>
         ))}
@@ -177,14 +193,14 @@ export function MapScreen() {
         <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(var(--tabbar-h) + 12px)', zIndex: 4, borderRadius: 20, background: 'var(--color-surface)', boxShadow: 'var(--shadow-lg)', padding: 14, display: 'flex', flexDirection: 'column', gap: 12, animation: 'rise .2s ease-out' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--color-accent-900)', boxShadow: '0 0 0 1px var(--color-accent-700)', display: 'grid', placeItems: 'center', fontSize: 20, color: 'var(--color-accent-200)' }}>
-              <i className={TYPES[sel.type][1]} />
+              <i aria-hidden className={TYPES[sel.type][1]} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 500 }}>{sel.name}</div>
               <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{sel.near ? `by ${sel.near}` : TYPES[sel.type][0]}</div>
             </div>
             <button aria-label="Close" onClick={() => store.ui({ areaSel: null })} style={{ width: 30, height: 30, border: 0, cursor: 'pointer', borderRadius: '50%', background: 'transparent', color: 'var(--color-neutral-400)', fontSize: 16 }}>
-              <i className="ph ph-x" />
+              <i aria-hidden className="ph ph-x" />
             </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--color-neutral-400)' }}>
@@ -199,7 +215,7 @@ export function MapScreen() {
               store.ui({ areaSel: null })
             }}
           >
-            <i className="ph-bold ph-crosshair" />
+            <i aria-hidden className="ph-bold ph-crosshair" />
             {meHere ? 'I’m still here +1:00' : 'I’m here'}
           </button>
         </div>

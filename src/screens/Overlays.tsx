@@ -1,69 +1,174 @@
 import { useEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { alive, remaining } from '../lib/rules'
-import { fmt, ME, STATUS, where } from '../lib/venue'
+import { fmt, glow, LASERS, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
-import { Toggle } from '../components/common'
+import { Avatar, Toggle } from '../components/common'
+import { disablePush, enablePush, loadPrefs, pushState, updatePrefs, type PushPrefs, type PushState } from '../lib/push'
 
-export function StatusSheet() {
+/** Your profile: name, color, status, note, ghost, notifications, SOS. */
+export function ProfileSheet() {
   const s = useStore()
   const now = useNow()
   const me = store.me()
   const mine = store.myDot()
   const live = alive(mine, now)
+  const [name, setName] = useState(me?.name ?? '')
   const [note, setNote] = useState(me?.note ?? '')
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const start = useRef({ status: me?.status, note: me?.note })
+  const [push, setPush] = useState<PushState | null>(null)
+  const [prefs, setPrefs] = useState<PushPrefs>(loadPrefs)
+  const [pushBusy, setPushBusy] = useState(false)
+  const [pushErr, setPushErr] = useState('')
+
+  useEffect(() => {
+    if (s.ui.sheet) pushState().then(setPush)
+  }, [s.ui.sheet])
   if (!s.ui.sheet || !me) return null
 
+  const others = s.members.filter(m => m.id !== me.id)
+  const taken = new Set(others.map(m => m.color.toLowerCase()))
+  const trimmed = name.trim()
+  const nameClash = others.some(m => m.name.toLowerCase() === trimmed.toLowerCase())
+
   const close = () => {
-    clearTimeout(timer.current)
-    if (note !== me.note) store.updateMe({ note })
+    const patch: Partial<typeof me> = {}
+    if (trimmed && trimmed !== me.name && !nameClash) patch.name = trimmed.slice(0, 20)
+    if (note !== me.note) patch.note = note
+    if (Object.keys(patch).length) store.updateMe(patch)
+    if (me.status !== start.current.status || note !== start.current.note) store.postStatus()
     store.ui({ sheet: false })
   }
-  const onNote = (v: string) => {
-    setNote(v)
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => store.updateMe({ note: v }), 1200)
+
+  const runPush = async (fn: () => Promise<void>) => {
+    setPushBusy(true)
+    setPushErr('')
+    try {
+      await fn()
+    } catch (e) {
+      setPushErr(e instanceof Error ? e.message : String(e))
+    }
+    setPush(await pushState())
+    setPushBusy(false)
+  }
+  const setPref = (k: keyof PushPrefs, v: boolean) => {
+    const next = { ...prefs, [k]: v }
+    setPrefs(next)
+    runPush(() => updatePrefs(me.id, next))
   }
 
+  const label = { fontSize: 11, color: 'var(--color-neutral-500)' } as const
   return (
     <>
       <div onClick={close} style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(10,11,20,.6)' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 11, background: 'var(--color-surface)', borderRadius: '26px 26px 0 0', boxShadow: 'var(--shadow-lg)', padding: '10px 20px calc(var(--safe-bottom) + 24px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'sheet .22s ease-out' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-neutral-700)', margin: '0 auto' }} />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 11, height: 11, borderRadius: '50%', background: ME, boxShadow: `0 0 6px ${ME}`, opacity: live ? 1 : 0.4 }} />
-          <span style={{ fontSize: 15, fontWeight: 500, flex: 1 }}>{live ? where(store.place(mine!.place_id), mine!.nx, mine!.ny) : 'Not checked in'}</span>
-          <span style={{ fontSize: 12, color: 'var(--color-neutral-500)', fontVariantNumeric: 'tabular-nums' }}>{live ? fmt(remaining(mine!, now)) : ''}</span>
+      <div className="scroll no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '90%', zIndex: 11, background: 'var(--color-surface)', borderRadius: '26px 26px 0 0', boxShadow: 'var(--shadow-lg)', padding: '10px 20px calc(var(--safe-bottom) + 24px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'sheet .22s ease-out' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-neutral-700)', margin: '0 auto', flex: 'none' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Avatar name={trimmed || me.name} color={me.color} size={48} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <input
+              aria-label="Your name"
+              value={name}
+              maxLength={20}
+              onChange={e => setName(e.target.value)}
+              style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: 'var(--color-text)', font: '500 20px var(--font-body)', letterSpacing: '-.02em', padding: 0 }}
+            />
+            <div style={{ ...label, color: nameClash ? 'var(--sos-text)' : label.color }}>
+              {nameClash ? 'Someone in the crew already has that name' : live ? `${where(store.place(mine!.place_id), mine!.nx, mine!.ny)} · ${fmt(remaining(mine!, now))} left` : 'Not checked in'}
+            </div>
+          </div>
         </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={label}>Your color · friends see you like this, you always see yourself in cyan</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {LASERS.map(c => {
+              const t = taken.has(c) && c !== me.color.toLowerCase()
+              const on = c === me.color.toLowerCase()
+              return (
+                <button
+                  key={c}
+                  aria-label={`Color ${c}${t ? ' (taken)' : ''}`}
+                  disabled={t}
+                  onClick={() => store.updateMe({ color: c })}
+                  style={{ width: 32, height: 32, borderRadius: '50%', border: 0, cursor: t ? 'not-allowed' : 'pointer', background: 'transparent', boxShadow: on ? `0 0 0 2px ${c}` : 'var(--shadow-sm)', display: 'grid', placeItems: 'center', opacity: t ? 0.2 : 1 }}
+                >
+                  <span style={{ width: 14, height: 14, borderRadius: '50%', background: c, boxShadow: on ? glow(c, 0.5) : 'none' }} />
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-          {STATUS.map(([icon, label], i) => {
+          {STATUS.map(([icon, l], i) => {
             const on = me.status === i
             return (
               <button
-                key={label}
+                key={l}
                 onClick={() => store.updateMe({ status: i })}
                 style={{ height: 68, border: 0, cursor: 'pointer', borderRadius: 'var(--radius-md)', background: on ? 'var(--color-accent-900)' : 'transparent', boxShadow: on ? '0 0 0 1px var(--color-accent)' : 'var(--shadow-sm)', color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-300)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, font: '500 11px var(--font-body)' }}
               >
-                <i className={icon} style={{ fontSize: 22 }} />
-                {label}
+                <i aria-hidden className={icon} style={{ fontSize: 22 }} />
+                {l}
               </button>
             )
           })}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', background: 'var(--color-bg)' }}>
-          <i className="ph ph-chat-circle" style={{ color: 'var(--color-neutral-500)' }} />
-          <input value={note} maxLength={40} onChange={e => onNote(e.target.value)} placeholder="Note for the crew" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--color-text)', font: '400 13px var(--font-body)' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', background: 'var(--color-bg)', flex: 'none' }}>
+          <i aria-hidden className="ph ph-chat-circle" style={{ color: 'var(--color-neutral-500)' }} />
+          <input value={note} maxLength={40} onChange={e => setNote(e.target.value)} placeholder="Note for the crew" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--color-text)', font: '400 13px var(--font-body)' }} />
           <span style={{ fontSize: 10, color: 'var(--color-neutral-600)' }}>{40 - note.length}</span>
         </div>
+
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <i className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
-          <span style={{ flex: 1, fontSize: 14 }}>Ghost</span>
+          <i aria-hidden className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
+          <span style={{ flex: 1, fontSize: 14 }}>
+            Ghost
+            <span style={{ display: 'block', ...label }}>Your check-ins stay on your phone</span>
+          </span>
           <Toggle on={me.ghost} onChange={v => store.setGhost(v)} label="Ghost mode" />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
-          <button className="btn btn-secondary" style={{ height: 46, color: 'var(--sos-text)', boxShadow: 'inset 0 0 0 1px var(--sos-line)', border: 0 }} onClick={() => store.ui({ sheet: false, sos: true })}>
-            <i className="ph-bold ph-siren" />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <i aria-hidden className="ph ph-bell-ringing" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
+            <span style={{ flex: 1, fontSize: 14 }}>
+              Notifications
+              <span style={{ display: 'block', ...label }}>
+                {push === 'install-first'
+                  ? 'Add Crew to your Home Screen first (Share → Add to Home Screen)'
+                  : push === 'unsupported'
+                    ? 'This browser can’t show notifications'
+                    : push === 'blocked'
+                      ? 'Blocked. Turn on in Settings → Notifications → Crew'
+                      : 'SOS and pings always come through'}
+              </span>
+            </span>
+            {(push === 'on' || push === 'off') && (
+              <Toggle on={push === 'on'} label="Notifications" onChange={v => runPush(() => (v ? enablePush(me.id, prefs) : disablePush()))} />
+            )}
+          </div>
+          {push === 'on' && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30 }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Friends’ check-ins and status</span>
+                <Toggle on={prefs.updates} label="Check-in notifications" onChange={v => setPref('updates', v)} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30 }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Chat messages</span>
+                <Toggle on={prefs.chat} label="Chat notifications" onChange={v => setPref('chat', v)} />
+              </div>
+            </>
+          )}
+          {pushBusy && <div style={label}>One moment…</div>}
+          {pushErr && <div style={{ fontSize: 12, color: 'var(--sos-text)' }}>{pushErr}</div>}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, flex: 'none' }}>
+          <button className="btn btn-secondary" style={{ height: 46, color: 'var(--sos-text)', boxShadow: 'inset 0 0 0 1px var(--sos-line)', border: 0 }} onClick={() => { close(); store.ui({ sos: true }) }}>
+            <i aria-hidden className="ph-bold ph-siren" />
             SOS
           </button>
           <button className="btn btn-primary" style={{ height: 46 }} onClick={close}>
@@ -131,7 +236,7 @@ export function SosScreen() {
         style={{ marginTop: 'calc(var(--safe-top) + 14vh)', width: 200, height: 200, borderRadius: '50%', position: 'relative', display: 'grid', placeItems: 'center', boxShadow: '0 0 0 1px #ff5c7a44', touchAction: 'none', cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' }}
       >
         <div style={{ position: 'absolute', inset: -6, borderRadius: '50%', background: `conic-gradient(#ff3b5c 0 ${pct}%, transparent ${pct}%)`, WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))', mask: 'radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px))', filter: 'drop-shadow(0 0 8px #ff3b5c)' }} />
-        <i className="ph-bold ph-siren" style={{ fontSize: 64, color: 'var(--sos-text)' }} />
+        <i aria-hidden className="ph-bold ph-siren" style={{ fontSize: 64, color: 'var(--sos-text)' }} />
       </div>
       <div style={{ marginTop: 32, fontSize: 24, fontWeight: 500 }}>{sent ? 'SOS sent' : 'Hold for SOS'}</div>
       <div style={{ marginTop: 6, fontSize: 13, color: 'var(--color-neutral-400)', textAlign: 'center', maxWidth: 290 }}>
@@ -144,7 +249,7 @@ export function SosScreen() {
       <div style={{ marginTop: 'auto', paddingBottom: 'calc(var(--safe-bottom) + 24px)', alignSelf: 'stretch', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {safe && (
           <button className="btn btn-secondary btn-block" style={{ height: 46 }} onClick={() => { store.ui({ sos: false }); store.openPlace('safe') }}>
-            <i className="ph ph-first-aid" />
+            <i aria-hidden className="ph ph-first-aid" />
             Show Safe Space
           </button>
         )}
