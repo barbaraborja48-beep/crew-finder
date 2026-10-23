@@ -62,13 +62,15 @@ create table public.push_config (
   hook_secret text not null default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
   vapid_public text,
   vapid_private text,
-  vapid_subject text -- the app's address, recorded the first time a phone asks for the key
+  vapid_subject text, -- the app's address, recorded the first time a phone asks for the key
+  api_key text        -- your publishable key: Supabase only lets requests with a key reach functions
 );
 alter table public.push_config enable row level security; -- no policies: only the server can read it
 revoke all on public.push_config from anon, authenticated;
 
 -- Your project's functions address. Change this if you use a different Supabase project.
-insert into public.push_config (functions_url) values ('https://ryqtifsfmhfzrgkrbxlm.supabase.co/functions/v1');
+insert into public.push_config (functions_url, api_key) values
+  ('https://ryqtifsfmhfzrgkrbxlm.supabase.co/functions/v1', 'sb_publishable_8nB2ZwwUCbB9_QRZXxar2g_aO7lXXwy');
 
 create table public.push_subscriptions (
   endpoint text primary key,
@@ -123,7 +125,8 @@ begin
   perform net.http_post(
     url := c.functions_url || '/push',
     body := jsonb_build_object('table', tg_table_name, 'record', to_jsonb(new)),
-    headers := jsonb_build_object('Content-Type', 'application/json', 'x-hook-secret', c.hook_secret),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-hook-secret', c.hook_secret)
+               || case when c.api_key is null then '{}'::jsonb else jsonb_build_object('apikey', c.api_key) end,
     timeout_milliseconds := 8000);
   return new;
 exception when others then
