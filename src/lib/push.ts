@@ -1,5 +1,5 @@
 // Web Push on this phone: ask permission, subscribe, tell Supabase who to notify.
-import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from './supabase'
+import { supabase } from './supabase'
 import { isIOS, isStandalone } from './view'
 
 export interface PushPrefs {
@@ -33,12 +33,15 @@ const b64ToBytes = (b64: string) => {
   return Uint8Array.from(s, c => c.charCodeAt(0))
 }
 
+/** The notification key, via the database. First time, the database asks the server to make it. */
 async function publicKey() {
-  const r = await fetch(`${SUPABASE_URL}/functions/v1/push`, { headers: { apikey: SUPABASE_ANON_KEY } })
-  if (!r.ok) throw new Error('Notifications aren’t set up on the server yet (SETUP.md, step 11).')
-  const { publicKey } = await r.json()
-  if (!publicKey) throw new Error('Notifications aren’t set up on the server yet (SETUP.md, step 11).')
-  return publicKey as string
+  for (let i = 0; i < 6; i++) {
+    const { data, error } = await supabase.rpc('push_public_key', { p_origin: location.origin })
+    if (error) throw new Error(/push_public_key/.test(error.message) ? 'Run the latest database fix first (SETUP.md, step 10).' : error.message)
+    if (data) return data as string
+    await new Promise(r => setTimeout(r, 1500))
+  }
+  throw new Error('The notification server didn’t answer. Check the push function is deployed (SETUP.md, step 10).')
 }
 
 async function save(memberId: string, sub: PushSubscription, prefs: PushPrefs) {

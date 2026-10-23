@@ -1,6 +1,7 @@
 // Crew Finder push notifications (Supabase Edge Function, Deno).
 //
-// GET  → { publicKey } for phones subscribing. Creates the VAPID keys on first use.
+// GET  → { publicKey }. Creates the VAPID keys on first use. Phones normally get the
+//        key via the push_public_key() database function instead.
 // POST ← called by the database trigger on every new check-in spot and message,
 //        signed with x-hook-secret. Sends Web Push to the rest of the crew.
 //
@@ -187,7 +188,9 @@ Deno.serve(async req => {
     }
     const c = await getConfig()
     if (req.headers.get('x-hook-secret') !== c.hook_secret) return json({ error: 'forbidden' }, 401)
-    const { table, record } = await req.json()
+    const body = await req.json()
+    if (body.init) return json({ ready: !!c.vapid_public }) // database asking us to create the keys
+    const { table, record } = body
     const note = await build(table, record)
     if (!note) return json({ skipped: true })
     return json(await send(note, record.crew_id, record.member_id, c))
