@@ -187,6 +187,7 @@ export function ProfileSheet() {
             Done
           </button>
         </div>
+        <div style={{ ...label, textAlign: 'center', color: 'var(--color-neutral-600)' }}>Version {__BUILD__}</div>
       </div>
     </>
   )

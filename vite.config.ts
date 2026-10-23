@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  define: {
+    // Shown in the profile so you can tell which version a phone is running.
+    __BUILD__: JSON.stringify(new Date().toLocaleString('en-GB', { timeZone: 'Europe/Madrid', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })),
+  },
   plugins: [
     react(),
     VitePWA({
