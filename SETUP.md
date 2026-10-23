@@ -100,7 +100,7 @@ The app can buzz your friends' phones when someone checks in somewhere new, chan
 4. Delete the sample code. Open [supabase/functions/push/index.ts](https://github.com/barbaraborja48-beep/crew-finder/blob/main/supabase/functions/push/index.ts) on GitHub, click **Copy raw file**, and paste it in.
 5. Click **Deploy** and wait for it to finish.
 6. Open the function's settings (**Details** tab) and switch **off** the option to verify/enforce JWT. Save. The database calls this function directly, so it checks its own secret instead.
-7. Seeing `MISSING_CREDENTIALS` if you open `https://ryqtifsfmhfzrgkrbxlm.supabase.co/functions/v1/push` in a browser is normal: Supabase wants an API key, which the app and database send but a browser tab doesn't. The real test is step 8.
+7. Seeing `MISSING_CREDENTIALS` if you open `https://ryqtifsfmhfzrgkrbxlm.supabase.co/functions/v1/push` in a browser is normal: Supabase wants an API key, which the app and database send but a browser tab doesn't. The real test is turning notifications on from your phone (below).
 8. If you ran the database update **before 23 Oct**, also run [this small fix](https://github.com/barbaraborja48-beep/crew-finder/blob/main/supabase/fixes/2026-10-23_push_apikey.sql) in the SQL Editor, so the database sends its key too.
 
 **On each phone** (it has to be the Home Screen app, not Safari): tap your avatar at the top right → switch on **Notifications** → **Allow**. You can mute check-ins or chat there. SOS and pings always come through.
