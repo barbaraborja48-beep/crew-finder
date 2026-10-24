@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { store, useStore } from '../lib/store'
-import { LASERS } from '../lib/venue'
+import { LASERS, VENUES } from '../lib/venue'
 import { isIOS, isStandalone } from '../lib/view'
 import { Penguin } from '../components/Penguin'
 import { PenguinPicker } from '../components/PenguinPicker'
@@ -41,6 +41,7 @@ export function Welcome() {
   const [mode, setMode] = useState<'start' | 'code'>('start')
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
+  const [venue, setVenue] = useState(VENUES[0].id)
   return (
     <Shell>
       <div>
@@ -63,8 +64,30 @@ export function Welcome() {
       </div>
 
       {mode === 'start' ? (
-        <form onSubmit={e => { e.preventDefault(); if (name.trim()) store.createCrew(name.trim()) }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input className="input" value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="Crew name, e.g. Halloween squad" />
+        <form onSubmit={e => { e.preventDefault(); if (name.trim()) store.createCrew(name.trim(), venue) }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div role="radiogroup" aria-label="Where" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {VENUES.map(o => {
+              const on = venue === o.id
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setVenue(o.id)}
+                  style={{
+                    border: 0, cursor: 'pointer', textAlign: 'left', padding: '11px 12px', borderRadius: 'var(--radius-md)', color: '#fff',
+                    background: on ? 'color-mix(in srgb, var(--color-accent-600) 22%, var(--color-surface))' : 'var(--color-surface)',
+                    boxShadow: on ? '0 0 0 1.5px var(--color-accent-400), 0 0 18px -6px var(--color-accent)' : 'var(--shadow-sm)',
+                  }}
+                >
+                  <span style={{ display: 'block', font: '500 13px var(--font-body)' }}>{o.name}</span>
+                  <span style={{ display: 'block', marginTop: 2, font: '400 11px var(--font-body)', color: 'var(--color-neutral-400)' }}>{o.where}</span>
+                </button>
+              )
+            })}
+          </div>
+          <input className="input" value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="Crew name, e.g. Saturday squad" />
           <button className="btn btn-primary" style={{ height: 46 }} disabled={!name.trim() || s.busy}>
             {s.busy ? 'Creating…' : 'Create crew'}
           </button>

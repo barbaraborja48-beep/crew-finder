@@ -132,7 +132,7 @@ export function StageScreen() {
           <i aria-hidden className="ph ph-caret-left" />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="kicker">{place.type === 'stage' ? `Stage ${place.n}` : TYPES[place.type][0]}</div>
+          <div className="kicker">{place.floor ? `Planta ${place.floor} · ${TYPES[place.type][0]}` : place.type === 'stage' ? `Stage ${place.n}` : TYPES[place.type][0]}</div>
           <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{placeTitle(place)}</div>
         </div>
         <SyncPill sync={sync} />
@@ -184,7 +184,7 @@ export function StageScreen() {
         {place.type === 'stage' && (
           <div style={{ height: 28, borderRadius: 'var(--radius-md) var(--radius-md) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10, letterSpacing: '.16em', color: 'var(--color-accent-200)', background: 'linear-gradient(180deg, var(--color-accent-800), transparent)', borderBottom: '1.5px solid var(--color-accent-300)', boxShadow: '0 6px 24px -10px var(--color-accent)' }}>
             <i aria-hidden className="ph ph-speaker-hifi" />
-            STAGE
+            {place.floor ? 'DJ BOOTH' : 'STAGE'}
           </div>
         )}
         <Scaled w={W} h={H}>

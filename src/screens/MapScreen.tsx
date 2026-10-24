@@ -1,6 +1,6 @@
 import { store, useStore } from '../lib/store'
 import { fresh, pinned } from '../lib/rules'
-import { hasCloseUp, mapPos, outline, toMap, TYPES, MAP_W, MAP_H, type PlaceType, type Venue } from '../lib/venue'
+import { floorView, hasCloseUp, mapPos, onFloor, outline, toMap, TYPES, MAP_W, MAP_H, type PlaceType, type Venue } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
 import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill } from '../components/common'
@@ -13,14 +13,22 @@ import type { State } from '../lib/store'
 export function MapScreen() {
   const s = useStore()
   const now = useNow()
-  const v = s.venue
+  const { ui } = s
+  // Multi-floor venues show one floor at a time; everything else is unchanged.
+  const floors = s.venue?.floors ?? []
+  const v = s.venue && floorView(s.venue, ui.floor)
   const sync = mySync(s, now)
   const rows = crewRows(s, now)
   const mine = store.myDot()
   const meLive = pinned(mine, now)
-  const { ui } = s
-  const stages = s.places.filter(p => p.type === 'stage')
-  const areas = s.places.filter(p => p.type !== 'stage' && ui.types[p.type])
+  // Every type shows unless switched off. Open areas start hidden on the big festival map
+  // (too many), but on a club map the balcony and entrances are the landmarks.
+  const isOn = (k: PlaceType) => ui.types[k] ?? (k !== 'open' || floors.length > 0)
+  const stages = s.places.filter(p => p.type === 'stage' && onFloor(p, ui.floor))
+  const areas = s.places.filter(p => p.type !== 'stage' && isOn(p.type) && onFloor(p, ui.floor))
+  const typesHere = (Object.entries(TYPES) as [PlaceType, [string, string]][]).filter(([k]) => s.places.some(p => p.type === k))
+  const onFloorCount = (n: number) =>
+    liveFriends.filter(r => store.place(r.dot!.place_id)?.floor === n).length + (meLive && store.place(mine!.place_id)?.floor === n ? 1 : 0)
   const liveFriends = rows.filter(r => r.live && r.dot)
   const seg = (on: boolean) => ({ background: on ? 'var(--color-accent-800)' : 'transparent', color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-400)' })
 
@@ -73,8 +81,8 @@ export function MapScreen() {
           h={MAP_H}
           overlay={
             <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
-              {(Object.entries(TYPES) as [PlaceType, [string, string]][]).map(([k, [label, icon]]) => {
-                const on = ui.types[k]
+              {typesHere.map(([k, [label, icon]]) => {
+                const on = isOn(k)
                 return (
                   <button
                     key={k}
@@ -92,12 +100,42 @@ export function MapScreen() {
               })}
             </div>
           }
+          corner={
+            floors.length > 1 && (
+              // Floor switch, like lift buttons: top floor on top. The dot counts who's there.
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+                {[...floors].reverse().map(f => {
+                  const on = ui.floor === f.n
+                  const c = onFloorCount(f.n)
+                  return (
+                    <button
+                      key={f.n}
+                      aria-label={f.name}
+                      aria-pressed={on}
+                      onClick={() => store.ui({ floor: f.n, areaSel: null })}
+                      className="round"
+                      style={{
+                        position: 'relative', width: 34, height: 34, font: '600 13px var(--font-body)',
+                        background: on ? 'var(--color-accent-700)' : 'rgba(0,0,0,.6)', color: on ? '#fff' : 'var(--color-neutral-300)',
+                        boxShadow: on ? '0 0 0 1.5px var(--color-accent-300), 0 0 14px var(--color-accent)' : undefined,
+                      }}
+                    >
+                      P{f.n}
+                      {c > 0 && (
+                        <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 14, height: 14, borderRadius: 7, padding: '0 3px', background: '#ff3bd4', color: '#fff', font: '600 9px/14px var(--font-body)' }}>{c}</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          }
         >
           {z => {
             const inv = 1 / z
             // Penguins grow a bit as you zoom (pins and labels stay the same size).
             const grow = Math.pow(z, 0.75) * inv
-            const penguins = v && ui.heat === 'crew' ? mapPenguins(s, v, rows, now) : []
+            const penguins = v && ui.heat === 'crew' ? mapPenguins(s, v, rows, now, ui.floor) : []
             // Names: faint text under the penguin, or above its head if another penguin is right there.
             // Times live in the list below, so the map stays calm.
             const labelAbove = new Set<string>()
@@ -113,7 +151,8 @@ export function MapScreen() {
                     style={{
                       position: 'absolute', inset: 0,
                       background: `url(${v.map_url}) ${v.view_ox}px ${v.view_oy}px / ${v.map_w * v.view_scale}px auto no-repeat`,
-                      filter: 'saturate(.55) brightness(.42) contrast(1.15)',
+                      // Photo-like festival maps get dimmed so penguins pop; line-drawn club plans don't need it.
+                      filter: floors.length ? 'brightness(.85)' : 'saturate(.55) brightness(.42) contrast(1.15)',
                     }}
                   />
                 )}
@@ -140,7 +179,7 @@ export function MapScreen() {
                     })}
                   </svg>
                 )}
-                {v && ui.types.stage &&
+                {v && isOn('stage') &&
                   stages.map(st => {
                     const p = toMap(v, st.x, st.y)
                     return (
@@ -284,11 +323,11 @@ interface MapPenguin {
 }
 
 /** Everyone's penguin on the overview map (yours too), sorted back to front. */
-function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number): MapPenguin[] {
+function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number, floor: number): MapPenguin[] {
   const out: MapPenguin[] = []
   for (const r of rows) {
     const pl = r.dot && store.place(r.dot.place_id)
-    if (!r.dot || !pl || !r.live) continue
+    if (!r.dot || !pl || !r.live || !onFloor(pl, floor)) continue
     const p = mapPos(v, pl, r.dot.nx, r.dot.ny)
     out.push({
       key: r.member.id, name: r.member.name, mine: false, ...p, color: r.member.color, acc: r.member.acc ?? 0,
@@ -299,7 +338,7 @@ function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number): MapPengu
   const me = store.me()
   const mine = store.myDot()
   const pl = mine && store.place(mine.place_id)
-  if (me && mine && pl && pinned(mine, now)) {
+  if (me && mine && pl && pinned(mine, now) && onFloor(pl, floor)) {
     out.push({
       key: me.id, name: me.name, mine: true, ...mapPos(v, pl, mine.nx, mine.ny), color: me.color, acc: me.acc ?? 0,
       activity: activityFor(pl.type, me.status, fresh(mine, now)), live: fresh(mine, now), glow: fraction(mine, now),

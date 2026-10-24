@@ -11,7 +11,7 @@ interface View {
   ty: number
 }
 
-export function ZoomPan({ w, h, children, overlay }: { w: number; h: number; children: (z: number) => ReactNode; overlay?: ReactNode }) {
+export function ZoomPan({ w, h, children, overlay, corner }: { w: number; h: number; children: (z: number) => ReactNode; overlay?: ReactNode; corner?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<View>({ z: 1, tx: 0, ty: 0 })
   const [smooth, setSmooth] = useState(false) // animate button / double-tap zooms, not finger moves
@@ -167,6 +167,7 @@ export function ZoomPan({ w, h, children, overlay }: { w: number; h: number; chi
         {children(view.z)}
       </div>
       {overlay}
+      {corner && <div style={{ position: 'absolute', left: 10, bottom: 22, zIndex: 3 }}>{corner}</div>}
       <div style={{ position: 'absolute', right: 10, bottom: 22, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 3 }}>
         {button('Zoom in', 'ph ph-plus', () => zoomAt(v.current.z * 1.8, w / 2, h / 2, true))}
         {button('Zoom out', 'ph ph-minus', () => zoomAt(v.current.z / 1.8, w / 2, h / 2, true))}

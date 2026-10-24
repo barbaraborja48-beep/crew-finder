@@ -27,11 +27,18 @@ export default defineConfig({
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 3_000_000,
-        // App shell, icon fonts and the venue map all load with zero signal.
+        // App shell and icon fonts load with zero signal. Venue maps are left out so each
+        // phone only downloads the maps for its own crew's venue (cached below, once).
         globPatterns: ['**/*.{js,css,html,woff2,webp,png}'],
+        globIgnores: ['**/assets/*.webp'],
         navigateFallback: '/index.html',
         importScripts: ['/push-sw.js'], // notification handling (public/push-sw.js)
         runtimeCaching: [
+          {
+            urlPattern: /\/assets\/[^/]+\.webp$/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'venue-maps', expiration: { maxEntries: 20 } },
+          },
           {
             // Crew photos: once seen, keep them.
             urlPattern: /\/storage\/v1\/object\/public\/photos\//,
