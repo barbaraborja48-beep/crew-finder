@@ -100,11 +100,12 @@ export function MapScreen() {
           overlay={
             <>
             {floors.length > 0 && !tapPin && !sel && (
-              <div style={{ position: 'absolute', left: '50%', bottom: 10, transform: 'translateX(-50%)', zIndex: 3, pointerEvents: 'none', whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: 'rgba(255,255,255,.55)', padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,.6)' }}>
+              <div style={{ position: 'absolute', left: '50%', top: 8, transform: 'translateX(-50%)', zIndex: 3, pointerEvents: 'none', whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: 'rgba(255,255,255,.55)', padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,.6)' }}>
                 Tap the map to pin your spot
               </div>
             )}
-            <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
+            {/* Filters for the big festival map; a club plan is small enough to show everything. */}
+            {!floors.length && <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
               {typesHere.map(([k, [label, icon]]) => {
                 const on = isOn(k)
                 return (
@@ -122,7 +123,7 @@ export function MapScreen() {
                   </button>
                 )
               })}
-            </div>
+            </div>}
             </>
           }
           corner={
@@ -222,7 +223,8 @@ export function MapScreen() {
                         <div key={st.id}>
                           <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
                             <polygon points={outline(v, sq).map(q => `${q.x},${q.y}`).join(' ')} style={{ fill: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 60%, transparent)', strokeWidth: inv }} />
-                            {[1 / 3, 2 / 3].flatMap(t => [line(at(t, 0), at(t, 1), `v${t}`), line(at(0, t), at(1, t), `h${t}`)])}
+                            {(sq.cols ?? [1 / 3, 2 / 3]).map(t => line(at(t, 0), at(t, 1), `v${t}`))}
+                            {(sq.rows ?? [1 / 3, 2 / 3]).map(t => line(at(0, t), at(1, t), `h${t}`))}
                             {line(at(0, 0), at(1, 0), 'front', true)}
                           </svg>
                           <button
@@ -436,26 +438,18 @@ function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number, floor: nu
   return out.sort((a, b) => a.y - b.y)
 }
 
-/** The smoke lounge: a little patio next to the club where smoking penguins hang out. */
+/** The smoking area: the strip outside the building's front, shown from both floors. */
 function Lounge({ v, p, inv }: { v: Venue; p: Place; inv: number }) {
   const sh = p.shape as { cx: number; cy: number; w: number; h: number }
   const a = toMap(v, sh.cx - sh.w / 2, sh.cy - sh.h / 2)
   const b = toMap(v, sh.cx + sh.w / 2, sh.cy + sh.h / 2)
   const [w, h] = [b.x - a.x, b.y - a.y]
-  const amber = '#ff8a3b'
-  const bench = (x: number, y: number, bw: number) => <rect x={a.x + x * w} y={a.y + y * h} width={bw * w} height={h * 0.035} rx={h * 0.015} fill="color-mix(in srgb, #ff8a3b 35%, #000)" />
+  const teal = '#3bf0ff'
   return (
     <g style={{ pointerEvents: 'none' }}>
-      <rect x={a.x} y={a.y} width={w} height={h} rx={8} fill="rgba(255,138,59,.07)" stroke={amber} strokeOpacity={0.7} strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`} style={{ filter: `drop-shadow(0 0 4px ${amber})` }} />
-      {bench(0.12, 0.9, 0.3)}
-      {bench(0.58, 0.9, 0.3)}
-      {bench(0.08, 0.5, 0.06)}
-      <circle cx={a.x + w * 0.5} cy={a.y + h * 0.62} r={Math.min(w, h) * 0.05} fill="none" stroke={amber} strokeOpacity={0.5} strokeWidth={inv} />
-      <text x={a.x + w / 2} y={a.y + h * 0.26} textAnchor="middle" fontSize={7.5} fontWeight={600} fill={amber} fillOpacity={0.85} fontFamily="Inter, sans-serif" letterSpacing=".04em">
-        SMOKE
-      </text>
-      <text x={a.x + w / 2} y={a.y + h * 0.26 + 9} textAnchor="middle" fontSize={7.5} fontWeight={600} fill={amber} fillOpacity={0.85} fontFamily="Inter, sans-serif" letterSpacing=".04em">
-        LOUNGE
+      <rect x={a.x} y={a.y} width={w} height={h} fill="rgba(0,120,120,.28)" stroke={teal} strokeOpacity={0.75} strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`} />
+      <text x={a.x + w / 2} y={a.y + h / 2 + 3} textAnchor="middle" fontSize={8} fontWeight={500} fill={teal} fillOpacity={0.9} fontFamily="Inter, sans-serif">
+        smoking area (outside)
       </text>
     </g>
   )

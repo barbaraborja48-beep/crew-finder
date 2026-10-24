@@ -1,13 +1,15 @@
 import { useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
-import { agoLong, hasCloseUp, isLine, placeTitle, TYPES, where, type Place, type PlaceType } from '../lib/venue'
+import { agoLong, floorView, floorZone, hasCloseUp, isLine, placeTitle, squarePoint, TYPES, where, type Place, type PlaceType, type SquareShape, type Venue } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf } from '../lib/view'
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
 import { Penguin } from '../components/Penguin'
 import { activityFor } from '../lib/penguin'
 
 const W = 362
+const MX = 26 // plan visible around an angled dance floor
+const MY = 40
 const GROUPS: PlaceType[] = ['stage', 'bar', 'food', 'picnic']
 
 /** Close-up floor size: stages are tall, bars and trucks are wide and shallow. */
@@ -23,6 +25,38 @@ const Tag = ({ style, children }: { style: React.CSSProperties; children: React.
   <div style={{ position: 'absolute', fontSize: 9, color: 'var(--color-neutral-700)', pointerEvents: 'none', letterSpacing: '.06em', ...style }}>{children}</div>
 )
 const solid = { background: 'linear-gradient(180deg, var(--color-accent-800), color-mix(in srgb, var(--color-accent-800) 40%, transparent))', boxShadow: '0 0 0 1.5px var(--color-accent-300), 0 6px 24px -8px var(--color-accent)', color: 'var(--color-accent-200)' }
+
+/** A club dance floor: the floor plan around it, turned so the DJ booth is at the top, with the zones on top. */
+function PlanFloor({ v, sh, g, gh }: { v: Venue; sh: SquareShape; g: number; gh: number }) {
+  const k = g / sh.w
+  const [x0, y0] = squarePoint(sh, 0, 0) // front-left corner
+  const [r1, r2] = sh.rows ?? [1 / 3, 2 / 3]
+  const [c1, c2] = sh.cols ?? [1 / 3, 2 / 3]
+  const line = 'color-mix(in srgb, #3bf0ff 55%, transparent)'
+  const xs = [0, c1, c2, 1]
+  const ys = [0, r1, r2, 1]
+  return (
+    <>
+      <img
+        src={v.map_url}
+        alt=""
+        draggable={false}
+        style={{ position: 'absolute', left: 0, top: 0, width: v.map_w, maxWidth: 'none', transformOrigin: '0 0', transform: `translate(${MX}px, ${MY}px) scale(${k}) rotate(${-sh.angle}deg) translate(${-x0}px, ${-y0}px)`, opacity: 0.6, pointerEvents: 'none' }}
+      />
+      <div style={{ position: 'absolute', left: MX, top: MY, width: g, height: gh, border: `1.5px dashed ${line}`, background: 'rgba(59,240,255,.04)', pointerEvents: 'none' }}>
+        {[c1, c2].map(c => <div key={c} style={{ position: 'absolute', left: `${c * 100}%`, top: 0, bottom: 0, borderLeft: `1.5px dashed ${line}` }} />)}
+        {[r1, r2].map(r => <div key={r} style={{ position: 'absolute', top: `${r * 100}%`, left: 0, right: 0, borderTop: `1.5px dashed ${line}` }} />)}
+        {ys.slice(0, 3).flatMap((y, i) =>
+          xs.slice(0, 3).map((x, j) => (
+            <div key={`${i}${j}`} style={{ position: 'absolute', left: `${x * 100}%`, top: `${y * 100}%`, width: `${(xs[j + 1] - x) * 100}%`, height: `${(ys[i + 1] - y) * 100}%`, display: 'grid', placeItems: 'center', font: '500 9px var(--font-body)', color: 'rgba(59,240,255,.5)', textAlign: 'center' }}>
+              {floorZone(sh, (x + xs[j + 1]) / 2, (y + ys[i + 1]) / 2)}
+            </div>
+          )),
+        )}
+      </div>
+    </>
+  )
+}
 
 /** What's drawn on the floor: the real thing at its relative size, plus zone guides. */
 function FloorArt({ p, h, maxLen }: { p: Place; h: number; maxLen: number }) {
@@ -103,7 +137,14 @@ export function StageScreen() {
   const sync = mySync(s, now)
 
   if (!place) return <div className="screen" />
-  const H = floorHeight(place)
+  // Angled club dance floors are drawn on the real floor plan, turned so the DJ is at the
+  // top, with a margin of plan around the grid so columns and walls help you find your spot.
+  const sq = place.shape?.kind === 'square' ? place.shape : null
+  const G = W - 2 * MX
+  const GH = sq ? (G * sq.h) / sq.w : 0
+  const H = sq ? GH + 2 * MY : floorHeight(place)
+  const toX = (nx: number) => (sq ? MX + nx * G : nx * W)
+  const toY = (ny: number) => (sq ? MY + ny * GH : ny * H)
   const maxLen = Math.max(1, ...s.places.map(p => (p.shape && isLine(p.shape) && p.shape.kind === 'counter' ? p.shape.len : 0)))
   const siblings = closeUps.filter(p => p.type === place.type)
   const groups = GROUPS.filter(g => closeUps.some(p => p.type === g))
@@ -111,10 +152,11 @@ export function StageScreen() {
 
   const onTap = (e: React.MouseEvent) => {
     const r = floorRef.current!.getBoundingClientRect()
-    const nx = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))
-    const ny = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))
+    const [x, y] = [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H]
+    const nx = Math.min(1, Math.max(0, sq ? (x - MX) / G : x / W))
+    const ny = Math.min(1, Math.max(0, sq ? (y - MY) / GH : y / H))
     store.checkIn(place.id, nx, ny)
-    setRipple({ x: nx * W, y: ny * H, k: Date.now() })
+    setRipple({ x: toX(nx), y: toY(ny), k: Date.now() })
     navigator.vibrate?.(15)
   }
 
@@ -194,7 +236,7 @@ export function StageScreen() {
             style={{ position: 'absolute', inset: 0, cursor: 'crosshair', overflow: 'hidden', background: 'radial-gradient(120% 55% at 50% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 70%)', borderRadius: place.type === 'stage' ? '0 0 var(--radius-lg) var(--radius-lg)' : 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}
           >
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: 'linear-gradient(var(--color-neutral-900) 1px, transparent 1px), linear-gradient(90deg, var(--color-neutral-900) 1px, transparent 1px)', backgroundSize: '22px 22px', opacity: 0.55 }} />
-            <FloorArt p={place} h={H} maxLen={maxLen} />
+            {sq && s.venue ? <PlanFloor v={floorView(s.venue, place.floor)} sh={sq} g={G} gh={GH} /> : <FloorArt p={place} h={H} maxLen={maxLen} />}
 
             {here.map(r => {
               const d = r.dot!
@@ -208,7 +250,7 @@ export function StageScreen() {
                     e.stopPropagation()
                     store.ui({ findId: r.member.id, screen: 'find' })
                   }}
-                  style={{ position: 'absolute', left: d.nx * W, top: d.ny * H, transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                  style={{ position: 'absolute', left: toX(d.nx), top: toY(d.ny), transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                 >
                   <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(place.type, r.member.status, r.fresh)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
@@ -222,7 +264,7 @@ export function StageScreen() {
               const f = fraction(mine!, now)
               const size = 32 + Math.min(4, mine!.taps - 1) * 4
               return (
-                <div style={{ position: 'absolute', left: mine!.nx * W, top: mine!.ny * H, transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', left: toX(mine!.nx), top: toY(mine!.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(place.type, me.status, fresh(mine, now))} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
                     You

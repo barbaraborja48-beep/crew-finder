@@ -3,8 +3,12 @@ export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'p
 /** Real outline on the map image (pixels). Places with a shape get a close-up view. */
 export type LineShape = { kind: 'counter' | 'trucks'; cx: number; cy: number; len: number; angle: number; depth: number }
 export type BoxShape = { kind: 'kiosk' | 'tables'; cx: number; cy: number; size: number }
-/** A dance floor at an angle: `angle` is the direction of "right" when facing the DJ, so front is 90° before it. */
-export type SquareShape = { kind: 'square'; cx: number; cy: number; size: number; angle: number }
+/**
+ * A dance floor at an angle, w wide (left→right facing the DJ) and h deep (front→back).
+ * `angle` is the direction of "right"; front is 90° before it. rows/cols: where the 3×3
+ * zones split (0–1), when they aren't even thirds.
+ */
+export type SquareShape = { kind: 'square'; cx: number; cy: number; w: number; h: number; angle: number; rows?: [number, number]; cols?: [number, number] }
 /** Club venues: the patch of floor a place covers. Tap anywhere in it to pin there. No close-up. */
 export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean } // bg: whole-floor fallback, no icon
 export type Shape = LineShape | BoxShape | SquareShape | ZoneShape
@@ -73,7 +77,7 @@ export const TYPES: Record<PlaceType, [label: string, icon: string]> = {
   picnic: ['Picnic', 'ph ph-picnic-table'],
   open: ['Open areas', 'ph ph-tree'],
   coat: ['Coat check', 'ph ph-coat-hanger'],
-  outside: ['Smoke lounge', 'ph ph-cigarette'],
+  outside: ['Smoking area', 'ph ph-cigarette'],
 }
 
 export const STATUS: [icon: string, label: string][] = [
@@ -96,6 +100,13 @@ export const MAP_H = 346
 export const zone = (nx: number, ny: number) =>
   `${ny < 0.333 ? 'front' : ny < 0.666 ? 'mid' : 'back'} ${nx < 0.333 ? 'L' : nx < 0.666 ? 'C' : 'R'}`
 
+/** Angled dance floors use the venue's own zone names: "front left", "middle middle"… */
+export function floorZone(sh: SquareShape, nx: number, ny: number) {
+  const [r1, r2] = sh.rows ?? [1 / 3, 2 / 3]
+  const [c1, c2] = sh.cols ?? [1 / 3, 2 / 3]
+  return `${ny < r1 ? 'front' : ny < r2 ? 'middle' : 'back'} ${nx < c1 ? 'left' : nx < c2 ? 'middle' : 'right'}`
+}
+
 /** Stages and shaped places (bars, trucks, picnic) open a tap-where-you-are close-up. */
 export const hasCloseUp = (p: Place | undefined) => !!p && (p.type === 'stage' || (!!p.shape && p.shape.kind !== 'zone'))
 
@@ -116,7 +127,7 @@ export function spot(p: Place, nx: number, ny: number) {
 export function where(p: Place | undefined, nx = 0.5, ny = 0.5) {
   if (!p) return 'Somewhere'
   const fl = p.floor ? ` · Planta ${p.floor}` : ''
-  if (p.type === 'stage') return `${p.name} · ${zone(nx, ny)}${fl}`
+  if (p.type === 'stage') return `${p.name} · ${p.shape?.kind === 'square' ? floorZone(p.shape, nx, ny) : zone(nx, ny)}${fl}`
   const base = p.near ? `${p.name} · by ${p.near}` : p.name
   const s = p.shape ? spot(p, nx, ny) : ''
   return `${s ? `${base} · ${s}` : base}${fl}`
@@ -189,7 +200,7 @@ export function outline(v: Venue, sh: Shape) {
 /** Close-up spot (nx right, ny back, 0–1) → map image px on an angled dance floor. */
 export function squarePoint(sh: SquareShape, nx: number, ny: number): [number, number] {
   const a = (sh.angle * Math.PI) / 180
-  const [u, w] = [(nx - 0.5) * sh.size, (ny - 0.5) * sh.size] // right, back
+  const [u, w] = [(nx - 0.5) * sh.w, (ny - 0.5) * sh.h] // right, back
   return [sh.cx + Math.cos(a) * u - Math.sin(a) * w, sh.cy + Math.sin(a) * u + Math.cos(a) * w]
 }
 
@@ -206,9 +217,9 @@ export function placeAt(places: Place[], floor: number, x: number, y: number) {
     if (sh.kind === 'square') {
       const a = (sh.angle * Math.PI) / 180
       const [dx, dy] = [x - sh.cx, y - sh.cy]
-      nx = (dx * Math.cos(a) + dy * Math.sin(a)) / sh.size + 0.5
-      ny = (-dx * Math.sin(a) + dy * Math.cos(a)) / sh.size + 0.5
-      area = sh.size * sh.size
+      nx = (dx * Math.cos(a) + dy * Math.sin(a)) / sh.w + 0.5
+      ny = (-dx * Math.sin(a) + dy * Math.cos(a)) / sh.h + 0.5
+      area = sh.w * sh.h
     } else if (sh.kind === 'zone') {
       nx = (x - sh.cx) / sh.w + 0.5
       ny = (y - sh.cy) / sh.h + 0.5
