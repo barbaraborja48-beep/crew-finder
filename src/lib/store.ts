@@ -25,6 +25,9 @@ export interface Member {
   ghost: boolean
   last_seen: string
   created_at?: string
+  acc?: number // PinGü accessory, 0 = none
+  net?: number | null // their signal, 0–3, as last reported
+  saver?: boolean // data saver on
 }
 
 export interface Crew {
@@ -86,6 +89,7 @@ export interface State {
   photoFailed: Record<string, boolean>
   signal: 'ok' | 'none'
   syncing: boolean
+  myNet: number | null // this phone's signal right now, 0–3
   lastSync: number | null // when we last heard from the server
   dataSaver: boolean
   photosShown: Record<string, true> // in data saver, friends' photos load on tap
@@ -120,6 +124,7 @@ const initial: State = {
   photoFailed: {},
   signal: typeof navigator !== 'undefined' && !navigator.onLine ? 'none' : 'ok',
   syncing: false,
+  myNet: null,
   lastSync: null,
   dataSaver: loadDataSaver(),
   photosShown: {},
@@ -218,6 +223,8 @@ class Store {
   private syncAgain = false
   private syncTimer: ReturnType<typeof setTimeout> | undefined
   private lastSyncTry = 0
+  private netCandidate: number | null = null // level seen once; reported if seen twice in a row
+  private netToReport: number | null = null // rides along with the next sync
   private legacyVenueLoaded = false
   private failStreak = 0
   private saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -324,7 +331,7 @@ class Store {
     }
   }
 
-  async joinCrew(name: string, color: string) {
+  async joinCrew(name: string, color: string, acc = 0) {
     const code = this.state.invite
     if (!code) return
     this.set({ busy: true, error: null })
@@ -336,6 +343,7 @@ class Store {
       if (this.state.session && this.state.session.crewId !== m.crew_id) await this.resetLocal()
       this.set({ session: { memberId: m.id, crewId: m.crew_id }, members: [m] })
       await this.saveNow() // never lose the membership, even if the app is closed right away
+      if (acc && acc !== m.acc) this.updateMe({ acc })
       await this.sync()
       await this.saveNow()
       history.replaceState(null, '', '/')
@@ -386,6 +394,8 @@ class Store {
       if (Date.now() - this.lastSyncTry >= every - 500) this.sync()
     }, 5_000)
     this.applyDataSaver()
+    const me = this.me()
+    if (me && me.saver != null && me.saver !== this.state.dataSaver) this.updateMe({ saver: this.state.dataSaver })
     this.sync()
   }
 
@@ -397,6 +407,7 @@ class Store {
     }
     this.set({ dataSaver: on })
     this.applyDataSaver()
+    this.updateMe({ saver: on }) // friends see a little leaf on your penguin
   }
 
   private applyDataSaver() {
@@ -473,6 +484,9 @@ class Store {
         else if (it.table === 'crews') crew = { ...(crew ?? {}), ...it.row }
       }
       if (me) delete me.last_seen // the server stamps it
+      const netSent = this.netToReport
+      if (netSent != null) me = { ...(me ?? {}), net: netSent } // a couple of bytes on a request we're making anyway
+      const t0 = performance.now()
       const { data, error, status } = await supabase.rpc('crew_sync', {
         p_member: session.memberId,
         p_since: (await kv.get<string>('cursor')) ?? null,
@@ -482,6 +496,7 @@ class Store {
         p_me: me,
         p_crew: crew,
       })
+      this.measureSignal(error && isTransient(error, status) ? null : performance.now() - t0)
       if (error && (error.code === 'PGRST202' || status === 404)) {
         // The database update (low_data_sync.sql) isn't in yet: use the older, chattier way for now.
         ok = await this.legacySync(items, session.crewId)
@@ -509,6 +524,7 @@ class Store {
         await outbox.del(it.key)
         this.setPending(it.id, null)
       }
+      if (netSent != null && this.netToReport === netSent) this.netToReport = null
       this.applySync(r, session.crewId)
       if (r.rejected.length) {
         // e.g. someone took that color a second earlier. Pull a full copy to undo our local guess.
@@ -522,6 +538,7 @@ class Store {
       this.set({ signal: 'ok', lastSync: Date.now() })
     } catch (e) {
       console.warn('sync failed', e)
+      this.measureSignal(null)
       this.set({ signal: 'none' })
     } finally {
       this.syncing = false
@@ -535,6 +552,23 @@ class Store {
         this.queueSync(ok ? 300 : this.failStreak > 1 ? 10_000 : 5_000)
       }
     }
+  }
+
+  /**
+   * Signal level from how long a sync took: 3 great, 2 ok, 1 weak, 0 none.
+   * Your own penguin uses it right away; friends get it with a later sync,
+   * once the same new level shows up twice in a row (no twitching).
+   */
+  private measureSignal(ms: number | null) {
+    const level = ms == null ? 0 : ms < 1200 ? 3 : ms < 3500 ? 2 : 1
+    this.set({ myNet: level })
+    const reported = this.me()?.net ?? null
+    if (level === reported || level === 0) {
+      this.netCandidate = null // can't report "no signal" without signal anyway
+      return
+    }
+    if (this.netCandidate === level) this.netToReport = level
+    this.netCandidate = level
   }
 
   private applySync(r: SyncResponse, crewId: string) {

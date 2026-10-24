@@ -12,14 +12,14 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Crew Finder',
-        short_name: 'Crew',
-        description: 'Find your friends at the festival, even with bad signal.',
+        name: 'PinGü',
+        short_name: 'PinGü',
+        description: 'Find your crew at the festival, even with bad signal.',
         start_url: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#161826',
-        theme_color: '#161826',
+        background_color: '#000000',
+        theme_color: '#000000',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },

@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
-import { alive, dotOpacity, dotSize, fraction, nearFriend, remaining } from '../lib/rules'
-import { fmt, glow, hasCloseUp, isLine, ME, placeTitle, TYPES, where, type Place, type PlaceType } from '../lib/venue'
+import { alive, dotOpacity, fraction, nearFriend, remaining } from '../lib/rules'
+import { fmt, hasCloseUp, isLine, placeTitle, TYPES, where, type Place, type PlaceType } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf } from '../lib/view'
-import { Scaled, SmsFallback, SyncPill } from '../components/common'
+import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
+import { Penguin } from '../components/Penguin'
+import { activityFor } from '../lib/penguin'
 
 const W = 362
 const GROUPS: PlaceType[] = ['stage', 'bar', 'food', 'picnic']
@@ -198,26 +200,34 @@ export function StageScreen() {
             {here.map(r => {
               const d = r.dot!
               const f = fraction(d, now)
-              const size = dotSize(d.taps)
+              const size = 30 + Math.min(4, d.taps - 1) * 4
               return (
-                <div key={r.member.id} style={{ position: 'absolute', left: d.nx * W, top: d.ny * H, width: 0, height: 0, pointerEvents: 'none', opacity: dotOpacity(f) }}>
-                  <div style={{ position: 'absolute', width: size, height: size, borderRadius: '50%', transform: 'translate(-50%,-50%)', background: r.member.color, boxShadow: glow(r.member.color, f) }} />
-                  <div style={{ position: 'absolute', left: size / 2 + 5, top: -7, whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: 'var(--color-neutral-200)' }}>
+                <button
+                  key={r.member.id}
+                  aria-label={r.member.name}
+                  onClick={e => {
+                    e.stopPropagation()
+                    store.ui({ findId: r.member.id, screen: 'find' })
+                  }}
+                  style={{ position: 'absolute', left: d.nx * W, top: d.ny * H, transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                >
+                  <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(place.type, r.member.status, true)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
+                  <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
                     {r.member.name} {fmt(r.rem)}
-                  </div>
-                </div>
+                  </span>
+                </button>
               )
             })}
 
-            {meHere && (() => {
+            {meHere && me && (() => {
               const f = fraction(mine!, now)
-              const size = dotSize(mine!.taps, true)
+              const size = 32 + Math.min(4, mine!.taps - 1) * 4
               return (
-                <div style={{ position: 'absolute', left: mine!.nx * W, top: mine!.ny * H, width: 0, height: 0, pointerEvents: 'none', opacity: 0.2 + 0.8 * f }}>
-                  <div style={{ position: 'absolute', width: size, height: size, borderRadius: '50%', transform: 'translate(-50%,-50%)', background: sent ? ME : 'color-mix(in srgb, #3bf0ff 35%, transparent)', boxShadow: sent ? glow(ME, f) : `0 0 0 2px ${ME}, 0 0 10px #3bf0ff88` }} />
-                  <div style={{ position: 'absolute', left: size / 2 + 5, top: -7, whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: 'var(--color-neutral-200)' }}>
+                <div style={{ position: 'absolute', left: mine!.nx * W, top: mine!.ny * H, transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(place.type, me.status, true)} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
+                  <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
                     You {fmt(remaining(mine!, now))}
-                  </div>
+                  </span>
                 </div>
               )
             })()}
@@ -234,7 +244,11 @@ export function StageScreen() {
       </div>
 
       <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ width: 11, height: 11, borderRadius: '50%', background: ME, boxShadow: `0 0 6px ${ME}`, flex: 'none', opacity: meLive ? 1 : 0.4 }} />
+        {me && (
+          <span style={{ opacity: meLive ? 1 : 0.45 }}>
+            <Avatar name={me.name} color={me.color} acc={me.acc} size={34} />
+          </span>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 500 }}>{myLine}</div>
           <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{mySub}</div>

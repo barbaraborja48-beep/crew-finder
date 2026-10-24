@@ -1,6 +1,6 @@
-# Crew Finder
+# PinGü
 
-A private web app for a small friend group (4 to 12 people) to find each other at a festival with bad signal. Built from the "Crew Finder" design handoff, first target **Elrow Halloween Takeover, Recinto Iberdrola Music, Madrid, 31.10.26**.
+PinGü (penguin + pin) is a private web app for a small friend group (4 to 12 people) to find each other at a festival with bad signal. Built from the "Crew Finder" design handoff, first target **Elrow Halloween Takeover, Recinto Iberdrola Music, Madrid, 31.10.26**.
 
 Tap where you are on the venue map or a stage floor. Your dot glows in your laser color and fades over 2:30. Tap again nearby to extend it, and get bonus time when a friend is close. Everything queues offline and sends the moment there's any signal. Bars, food trucks and picnic areas have their own close-ups drawn to their real shape and size. There's also a crew chat that doubles as the night's history (every check-in, status change and join), a profile with name, color, status and notes, ghost mode, SOS, push notifications, and an iOS Shortcut for one-tap check-ins.
 
@@ -48,7 +48,7 @@ npm test                     # check-in rule tests
 npm run build                # production build + service worker
 ```
 
-`supabase/tests/` has a SQL test of every RLS policy and RPC. It runs on plain Postgres: load `supabase_stub.sql`, then all migrations, then `rls_and_rpc.sql` (seven `ERROR` lines expected, each a blocked action) or `push_and_profile.sql` (five expected).
+`supabase/tests/` has a SQL test of every RLS policy and RPC. It runs on plain Postgres: load `supabase_stub.sql`, then all migrations, then `rls_and_rpc.sql` (six `ERROR` lines expected, each a blocked action), `push_and_profile.sql` (five expected), `low_data_sync.sql` or `pingu.sql`.
 
 ## Not in the web version
 
