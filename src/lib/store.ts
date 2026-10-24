@@ -4,7 +4,6 @@
 // then a loop sends it whenever there is any signal. Rows use client-made
 // UUIDs, so a retry just upserts the same row again.
 import { useSyncExternalStore } from 'react'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase, ensureAuth, isTransient, configured } from './supabase'
 import { kv, outbox, type OutItem, type Table } from './db'
 import { compressPhoto } from './photo'
@@ -93,7 +92,7 @@ export interface State {
   lastSync: number | null // when we last heard from the server
   dataSaver: boolean
   photosShown: Record<string, true> // in data saver, friends' photos load on tap
-  toast: { text: string; icon: string; fg: string; key: number } | null
+  toast: { text: string; icon: string; fg: string; key: number; undo?: boolean } | null
   ui: {
     screen: Screen
     stage: string
@@ -127,7 +126,7 @@ const initial: State = {
   syncing: false,
   myNet: null,
   lastSync: null,
-  dataSaver: loadDataSaver(),
+  dataSaver: true, // friends' photos load when tapped
   photosShown: {},
   toast: null,
   ui: {
@@ -214,21 +213,12 @@ interface SyncResponse {
   places_hash?: string
 }
 
-const DATA_SAVER_KEY = 'crew-data-saver'
-function loadDataSaver() {
-  try {
-    return localStorage.getItem(DATA_SAVER_KEY) !== '0' // on unless you turned it off
-  } catch {
-    return true
-  }
-}
 
 // ─── store ────────────────────────────────────────────────────────────────
 
 class Store {
   state: State = initial
   private listeners = new Set<() => void>()
-  private channel: RealtimeChannel | null = null
   private syncing = false
   private syncAgain = false
   private syncTimer: ReturnType<typeof setTimeout> | undefined
@@ -240,7 +230,6 @@ class Store {
   private saveTimer: ReturnType<typeof setTimeout> | undefined
   private toastTimer: ReturnType<typeof setTimeout> | undefined
   private started = false
-  private live = false // realtime socket subscribed
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn)
@@ -271,10 +260,38 @@ class Store {
     return kv.set('snapshot', { session: s.session, venue: s.venue, places: s.places, crew: s.crew, members: s.members, checkins: s.checkins, messages: msgs, ghostDot: s.ghostDot })
   }
 
-  toast(text: string, icon = 'ph-bold ph-check', fg = ME) {
+  toast(text: string, icon = 'ph-bold ph-check', fg = ME, undo = false) {
     clearTimeout(this.toastTimer)
-    this.set({ toast: { text, icon, fg, key: Date.now() } })
-    this.toastTimer = setTimeout(() => this.set({ toast: null }), 2200)
+    this.set({ toast: { text, icon, fg, key: Date.now(), undo } })
+    this.toastTimer = setTimeout(() => this.set({ toast: null }), undo ? 5000 : 2200)
+  }
+
+  // ─── undo a pin (club maps pin on a single tap, so mis-taps happen) ─────
+  private undoPinState: { prev: Checkin | null; row: Checkin } | null = null
+  undoPin() {
+    const u = this.undoPinState
+    const s = this.state
+    if (!u || !s.session) return
+    this.undoPinState = null
+    // Put the row you just wrote back the way things were (or hide it if you had no pin).
+    const back: Checkin = u.prev
+      ? { ...u.row, place_id: u.prev.place_id, nx: u.prev.nx, ny: u.prev.ny, born: u.prev.born, taps: u.prev.taps }
+      : { ...u.row, born: Date.now() - 13 * 3600_000 }
+    this.set({ checkins: { ...s.checkins, [back.id]: back } })
+    this.enqueue('checkins', 'upsert', back.id, checkinRow(back))
+    this.toast('Pin undone', 'ph ph-arrow-counter-clockwise', 'var(--color-neutral-400)')
+  }
+
+  // ─── "coming in Premium" buttons: count taps, collect ratings ────────
+  logFeature(feature: string) {
+    const memberId = this.state.session?.memberId
+    if (memberId) void supabase.rpc('log_feature', { p_member: memberId, p_feature: feature }).then(() => {}, () => {})
+  }
+  async sendFeedback(feature: string, stars: number, comment: string) {
+    const memberId = this.state.session?.memberId
+    if (!memberId) return false
+    const { error } = await supabase.rpc('send_feedback', { p_member: memberId, p_feature: feature, p_stars: stars || null, p_comment: comment.trim() })
+    return !error
   }
 
   // ─── boot / join ──────────────────────────────────────────────────────
@@ -363,8 +380,6 @@ class Store {
   }
 
   async leave() {
-    this.channel?.unsubscribe()
-    this.channel = null
     await this.resetLocal()
     this.set({ ...initial, phase: 'welcome', signal: this.state.signal })
   }
@@ -393,60 +408,12 @@ class Store {
       }
     })
     if (new URLSearchParams(location.search).get('open')) history.replaceState(null, '', '/')
-    // Data saver: no live connection, check every 60 s while open (notifications trigger checks too).
-    // Otherwise a live connection, plus a check every 20 s whenever it's down.
-    setInterval(() => {
-      if (document.visibilityState !== 'visible') return
-      const every = this.state.dataSaver ? 60_000 : this.live ? Infinity : 20_000
-      if (Date.now() - this.lastSyncTry >= every - 500) this.sync()
-    }, 5_000)
-    this.applyDataSaver()
-    const me = this.me()
-    if (me && me.saver != null && me.saver !== this.state.dataSaver) this.updateMe({ saver: this.state.dataSaver })
+    // Low-signal mode, always: no live connection and no timer. The app talks to the server
+    // only when there's a reason: you pin or post (that same request brings back everyone's
+    // latest), you open or come back to the app, you tap refresh, or a notification arrives.
+    // Each of those is one small request (well under 1 KB when nothing much changed), which is
+    // what still gets through a packed, saturated crowd.
     this.sync()
-  }
-
-  setDataSaver(on: boolean) {
-    try {
-      localStorage.setItem(DATA_SAVER_KEY, on ? '1' : '0')
-    } catch {
-      /* private mode */
-    }
-    this.set({ dataSaver: on })
-    this.applyDataSaver()
-    this.updateMe({ saver: on }) // friends see a little leaf on your penguin
-  }
-
-  private applyDataSaver() {
-    if (this.state.dataSaver) {
-      this.channel?.unsubscribe()
-      this.channel = null
-      this.live = false
-    } else if (!this.channel && this.state.session) {
-      this.subscribeRealtime(this.state.session.crewId)
-    }
-  }
-
-  private subscribeRealtime(crewId: string) {
-    const f = `crew_id=eq.${crewId}`
-    this.channel = supabase
-      .channel(`crew-${crewId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checkins', filter: f }, p => {
-        if (p.new && 'id' in p.new) this.mergeCheckins([toCheckin(p.new)])
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: f }, p => {
-        if (p.new && 'id' in p.new) this.mergeMessages([toMessage(p.new)])
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: f }, p => {
-        if (p.new && 'id' in p.new) this.mergeMembers([p.new as Member])
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crews', filter: `id=eq.${crewId}` }, p => {
-        this.set({ crew: p.new as Crew })
-      })
-      .subscribe(status => {
-        this.live = status === 'SUBSCRIBED'
-        if (this.live) this.queueSync() // catch up on anything missed while it was down
-      })
   }
 
   /** Kept for callers that just want fresh data. */
@@ -562,7 +529,9 @@ class Store {
         this.syncAgain = false
         this.queueSync(0)
       } else if (left) {
-        this.queueSync(ok ? 300 : this.failStreak > 1 ? 10_000 : 5_000)
+        // Something of yours still hasn't gone out: keep trying with tiny requests while the
+        // app is open, quickly at first (2 s, 4 s, 8 s), then every 15 s.
+        this.queueSync(ok ? 300 : Math.min(15_000, 2_000 * 2 ** Math.max(0, this.failStreak - 1)))
       }
     }
   }
@@ -750,7 +719,7 @@ class Store {
   // ─── actions ──────────────────────────────────────────────────────────
 
   /** Pin on a stage floor (nx/ny 0–1), an area card, or a quick zone. */
-  checkIn(placeId: string, nx: number, ny: number, extendAnywhere = false) {
+  checkIn(placeId: string, nx: number, ny: number, extendAnywhere = false, undoable = false) {
     const s = this.state
     const me = this.me()
     if (!me || !s.session) return
@@ -764,11 +733,12 @@ class Store {
       this.set({ ghostDot: row })
       return this.toast(`${msg} · ghost, not shared`, 'ph ph-ghost', 'var(--color-neutral-400)')
     }
+    this.undoPinState = { prev: mine ?? null, row }
     this.set({ checkins: { ...s.checkins, [row.id]: row } })
     this.enqueue('checkins', 'upsert', row.id, checkinRow(row))
     this.updateMe({ last_seen: iso(now) }, true)
-    if (s.signal === 'none') this.toast(`${msg} · queued, sends with signal`, 'ph ph-clock', '#ffd97a')
-    else this.toast(msg)
+    if (s.signal === 'none') this.toast(`${msg} · queued, sends with signal`, 'ph ph-clock', '#ffd97a', undoable)
+    else this.toast(msg, undefined, undefined, undoable)
   }
 
   /** Change your own member row (status, note, ghost…). */
@@ -873,8 +843,11 @@ class Store {
     const s = this.state
     if (!s.crew) return
     const patch = { meet_spot_place_id: placeId, meet_spot_note: note.slice(0, 40) }
+    const moved = placeId !== s.crew.meet_spot_place_id
     this.set({ crew: { ...s.crew, ...patch } })
     this.enqueue('crews', 'update', s.crew.id, patch)
+    // One of the few things that still sends a notification (see the pins/low-signal SQL).
+    if (moved) this.addMessage({ type: 'status', text: `set the meet spot: ${where(this.place(placeId))}` })
   }
 
   openFromNotification(open: string, member?: string | null) {

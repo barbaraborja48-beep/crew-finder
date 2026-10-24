@@ -312,7 +312,7 @@ a { color: var(--color-accent-300); }
    name, with the same film grain as the rest of the app. */
 .dj {
   position: relative; display: block; width: 100%; height: 108px; border: 0; padding: 0; cursor: pointer; text-align: left;
-  overflow: hidden; isolation: isolate; color: #fff; background: #050508; border-radius: 18px 18px 0 0;
+  overflow: hidden; isolation: isolate; color: #fff; background: #050508; border-radius: 18px 18px 0 0; container-type: inline-size;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 10px 40px -14px #a98bff;
 }
 .dj::after, .dj-sheet::after {
@@ -337,7 +337,7 @@ a { color: var(--color-accent-300); }
 .dj-kicker b { font-weight: 700; }
 .dj-live { width: 7px; height: 7px; border-radius: 50%; background: #ff3b5c; box-shadow: 0 0 8px #ff3b5c; animation: dj-blink 1.4s ease-in-out infinite; }
 @keyframes dj-blink { 50% { opacity: .35 } }
-.dj-name { font: 500 32px/1.05 var(--font-body); letter-spacing: -.035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 20px; }
+.dj-name { font: 500 min(32px, 12cqw)/1.05 var(--font-body); letter-spacing: -.035em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 20px; }
 .dj-time { margin-top: 3px; font: 400 14px var(--font-body); letter-spacing: -.01em; color: rgba(255, 255, 255, .9); display: flex; align-items: center; gap: 6px; }
 .dj-time i { font-size: 13px; }
 .dj-bar { margin-top: auto; height: 2px; border-radius: 1px; background: rgba(255, 255, 255, .22); overflow: hidden; }
@@ -346,7 +346,7 @@ a { color: var(--color-accent-300); }
 .dj-spk.l { display: none; }
 .dj-spk.r { right: 14px; }
 
-.dj-sheet-bg { position: absolute; inset: 0; z-index: 30; background: rgba(0, 0, 0, .55); backdrop-filter: blur(6px); display: flex; align-items: flex-end; animation: rise .2s ease-out; }
+.dj-sheet-bg { position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .55); backdrop-filter: blur(6px); display: flex; align-items: flex-end; animation: rise .2s ease-out; }
 .dj-sheet { position: relative; isolation: isolate; overflow: hidden; width: 100%; border-radius: 26px 26px 0 0; background: #050508; color: #fff; padding: 16px 0 calc(var(--safe-bottom, 0px) + 18px); box-shadow: 0 -10px 50px -10px #a98bff; animation: sheet .28s ease-out; }
 .dj-sheet-top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 0 18px 8px; }
 .dj-pages { position: relative; z-index: 2; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; }
@@ -361,7 +361,7 @@ a { color: var(--color-accent-300); }
 .dj-label { font: 400 13px var(--font-body); color: rgba(255, 255, 255, .75); }
 .dj-count { font: 500 64px/1 var(--font-body); letter-spacing: -.05em; font-variant-numeric: tabular-nums; margin-top: 6px; }
 .dj-tiles { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 22px; }
-.dj-tile { display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 16px; background: rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); color: #fff; text-decoration: none; font: 400 11px var(--font-body); }
+.dj-tile { border: 0; cursor: pointer; text-align: left; display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 16px; background: rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); color: #fff; text-decoration: none; font: 400 11px var(--font-body); }
 .dj-tile i { font-size: 22px; }
 .dj-tile b { display: block; font: 500 14px var(--font-body); }
 .dj-tile span { color: rgba(255, 255, 255, .7); }
@@ -369,4 +369,5 @@ a { color: var(--color-accent-300); }
 .dj-dots { position: relative; z-index: 2; display: flex; justify-content: center; gap: 6px; padding-top: 6px; }
 .dj-dots i { width: 6px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .3); transition: width .2s; }
 .dj-dots i.on { width: 18px; background: #fff; }
+@container (max-width: 260px) { .dj-day { display: none; } .dj-kicker { letter-spacing: .1em; } .dj-time { font-size: 13px; } }
 @media (prefers-reduced-motion: reduce) { .lava i { animation: none !important; } }

@@ -1,15 +1,14 @@
 import { useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
-import { agoLong, floorView, floorZone, hasCloseUp, isLine, placeTitle, squarePoint, TYPES, where, type Place, type PlaceType, type SquareShape, type Venue } from '../lib/venue'
+import { agoLong, CORNER, hasCloseUp, isLine, placeTitle, rowDip, TYPES, where, type Place, type PlaceType, type SquareShape } from '../lib/venue'
+import { DjDisplay, DjSheet } from '../components/DjDisplay'
 import { useNow, mySync, crewRows, statusOf } from '../lib/view'
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
 import { Penguin } from '../components/Penguin'
 import { activityFor } from '../lib/penguin'
 
 const W = 362
-const MX = 26 // plan visible around an angled dance floor
-const MY = 40
 const GROUPS: PlaceType[] = ['stage', 'bar', 'food', 'picnic']
 
 /** Close-up floor size: stages are tall, bars and trucks are wide and shallow. */
@@ -26,34 +25,78 @@ const Tag = ({ style, children }: { style: React.CSSProperties; children: React.
 )
 const solid = { background: 'linear-gradient(180deg, var(--color-accent-800), color-mix(in srgb, var(--color-accent-800) 40%, transparent))', boxShadow: '0 0 0 1.5px var(--color-accent-300), 0 6px 24px -8px var(--color-accent)', color: 'var(--color-accent-200)' }
 
-/** A club dance floor: the floor plan around it, turned so the DJ booth is at the top, with the zones on top. */
-function PlanFloor({ v, sh, g, gh }: { v: Venue; sh: SquareShape; g: number; gh: number }) {
-  const k = g / sh.w
-  const [x0, y0] = squarePoint(sh, 0, 0) // front-left corner
+/** Quick pins around a club dance floor (Mondo Disko): place id, label, where it sits. */
+const CLUB_SPOTS: { id: string; label: string; icon: string; style: React.CSSProperties }[] = [
+  { id: 'm-bar1', label: 'Bar', icon: 'ph ph-martini', style: { left: 8, top: '70%' } },
+  { id: 'm-bar2', label: 'Bar', icon: 'ph ph-martini', style: { left: '17%', bottom: 8 } },
+  { id: 'm-fuera', label: 'Outside / smoking', icon: 'ph ph-cigarette', style: { right: 8, bottom: 8 } },
+]
+
+/** Pin yourself somewhere in a spot (not all on the same pixel), with Undo. */
+const pinSpot = (id: string) => {
+  const j = () => 0.5 + (Math.random() - 0.5) * 0.4
+  store.checkIn(id, j(), j(), true, true)
+}
+
+/** The tiles either side of the DJ screen. */
+function SideTile({ id, icon, label, places }: { id: string; icon: string; label: string; places: Place[] }) {
+  if (!places.some(p => p.id === id)) return <span style={{ width: 62, flex: 'none' }} />
+  return (
+    <button
+      onClick={() => pinSpot(id)}
+      aria-label={label}
+      style={{ width: 62, flex: 'none', border: 0, cursor: 'pointer', borderRadius: '14px 14px 0 0', background: 'rgba(16,16,24,.95)', color: '#fff', boxShadow: 'inset 0 0 0 1px var(--color-accent-700), 0 0 14px -6px var(--color-accent)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, font: '500 11px/1.15 var(--font-body)', textAlign: 'center', padding: '0 4px' }}
+    >
+      <i aria-hidden className={icon} style={{ fontSize: 20 }} />
+      {label}
+    </button>
+  )
+}
+
+/** A club dance floor seen from the crowd: DJ at the top, rows curving around it, 3 columns. */
+function ClubFloor({ sh, h, places }: { sh: SquareShape; h: number; places: Place[] }) {
   const [r1, r2] = sh.rows ?? [1 / 3, 2 / 3]
   const [c1, c2] = sh.cols ?? [1 / 3, 2 / 3]
-  const line = 'color-mix(in srgb, #3bf0ff 55%, transparent)'
-  const xs = [0, c1, c2, 1]
-  const ys = [0, r1, r2, 1]
+  const cyan = 'color-mix(in srgb, #3bf0ff 60%, transparent)'
+  const arc = (r: number) => {
+    const pts = Array.from({ length: 21 }, (_, i) => i / 20).map(x => `${x * W},${(r + rowDip(sh, x)) * h}`)
+    return `M${pts.join(' L')}`
+  }
+  const tag = (text: string, x: number, y: number) => (
+    <div key={text + x + y} style={{ position: 'absolute', left: `${x * 100}%`, top: y * h, transform: 'translate(-50%, -50%)', font: '500 9px var(--font-body)', color: 'rgba(59,240,255,.5)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>{text}</div>
+  )
+  const mid = (a: number, b: number, x: number) => (a + rowDip(sh, x) + b + rowDip(sh, x)) / 2
   return (
     <>
-      <img
-        src={v.map_url}
-        alt=""
-        draggable={false}
-        style={{ position: 'absolute', left: 0, top: 0, width: v.map_w, maxWidth: 'none', transformOrigin: '0 0', transform: `translate(${MX}px, ${MY}px) scale(${k}) rotate(${-sh.angle}deg) translate(${-x0}px, ${-y0}px)`, opacity: 0.6, pointerEvents: 'none' }}
-      />
-      <div style={{ position: 'absolute', left: MX, top: MY, width: g, height: gh, border: `1.5px dashed ${line}`, background: 'rgba(59,240,255,.04)', pointerEvents: 'none' }}>
-        {[c1, c2].map(c => <div key={c} style={{ position: 'absolute', left: `${c * 100}%`, top: 0, bottom: 0, borderLeft: `1.5px dashed ${line}` }} />)}
-        {[r1, r2].map(r => <div key={r} style={{ position: 'absolute', top: `${r * 100}%`, left: 0, right: 0, borderTop: `1.5px dashed ${line}` }} />)}
-        {ys.slice(0, 3).flatMap((y, i) =>
-          xs.slice(0, 3).map((x, j) => (
-            <div key={`${i}${j}`} style={{ position: 'absolute', left: `${x * 100}%`, top: `${y * 100}%`, width: `${(xs[j + 1] - x) * 100}%`, height: `${(ys[i + 1] - y) * 100}%`, display: 'grid', placeItems: 'center', font: '500 9px var(--font-body)', color: 'rgba(59,240,255,.5)', textAlign: 'center' }}>
-              {floorZone(sh, (x + xs[j + 1]) / 2, (y + ys[i + 1]) / 2)}
-            </div>
-          )),
-        )}
-      </div>
+      <svg width={W} height={h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        <path d={arc(r1)} fill="none" stroke={cyan} strokeWidth={1.5} />
+        <path d={arc(r2)} fill="none" stroke={cyan} strokeWidth={1.5} />
+        <line x1={c1 * W} y1={0} x2={c1 * W} y2={h} stroke={cyan} strokeWidth={1.5} />
+        <line x1={c2 * W} y1={0} x2={c2 * W} y2={h} stroke={cyan} strokeWidth={1.5} />
+        {/* the two spots either side of the DJ booth */}
+        <rect x={2} y={2} width={CORNER * W} height={CORNER * h} rx={8} fill="rgba(59,240,255,.05)" stroke={cyan} strokeDasharray="3 3" />
+        <rect x={W - CORNER * W - 2} y={2} width={CORNER * W} height={CORNER * h} rx={8} fill="rgba(59,240,255,.05)" stroke={cyan} strokeDasharray="3 3" />
+      </svg>
+      {[[c1 / 2, 'left'], [(c1 + c2) / 2, 'middle'], [(c2 + 1) / 2, 'right']].flatMap(([x, col]) => [
+        tag(`front ${col}`, x as number, mid(0, r1, x as number) + (col === 'middle' ? 0 : 0.03)),
+        tag(`middle ${col}`, x as number, mid(r1, r2, x as number)),
+        tag(`back ${col}`, x as number, mid(r2, 1, x as number)),
+      ])}
+      {tag('front left corner', CORNER / 2 + 0.09, CORNER / 2)}
+      {tag('front right corner', 1 - CORNER / 2 - 0.09, CORNER / 2)}
+      {CLUB_SPOTS.filter(sp => places.some(p => p.id === sp.id)).map(sp => (
+        <button
+          key={sp.id + sp.label}
+          onClick={e => {
+            e.stopPropagation() // a spot button, not a tap on the floor
+            pinSpot(sp.id)
+          }}
+          style={{ position: 'absolute', zIndex: 3, ...sp.style, border: 0, cursor: 'pointer', height: 28, padding: '0 10px', borderRadius: 999, background: 'rgba(10,10,16,.88)', color: '#fff', boxShadow: '0 0 0 1px var(--color-accent-600), 0 0 12px -4px var(--color-accent)', font: '500 11px var(--font-body)', display: 'flex', alignItems: 'center', gap: 5 }}
+        >
+          <i aria-hidden className={sp.icon} />
+          {sp.label}
+        </button>
+      ))}
     </>
   )
 }
@@ -128,6 +171,7 @@ export function StageScreen() {
   const now = useNow(250)
   const floorRef = useRef<HTMLDivElement>(null)
   const [ripple, setRipple] = useState<{ x: number; y: number; k: number } | null>(null)
+  const [djOpen, setDjOpen] = useState(false)
   const closeUps = s.places.filter(hasCloseUp)
   const place = closeUps.find(p => p.id === s.ui.stage) ?? closeUps.find(p => p.type === 'stage')
   const rows = crewRows(s, now)
@@ -137,14 +181,12 @@ export function StageScreen() {
   const sync = mySync(s, now)
 
   if (!place) return <div className="screen" />
-  // Angled club dance floors are drawn on the real floor plan, turned so the DJ is at the
-  // top, with a margin of plan around the grid so columns and walls help you find your spot.
+  // Club dance floors (Mondo) get the crowd's-eye layout with the DJ screen on top.
   const sq = place.shape?.kind === 'square' ? place.shape : null
-  const G = W - 2 * MX
-  const GH = sq ? (G * sq.h) / sq.w : 0
-  const H = sq ? GH + 2 * MY : floorHeight(place)
-  const toX = (nx: number) => (sq ? MX + nx * G : nx * W)
-  const toY = (ny: number) => (sq ? MY + ny * GH : ny * H)
+  const H = floorHeight(place)
+  const lineup = s.venue?.lineup ?? []
+  const toX = (nx: number) => nx * W
+  const toY = (ny: number) => ny * H
   const maxLen = Math.max(1, ...s.places.map(p => (p.shape && isLine(p.shape) && p.shape.kind === 'counter' ? p.shape.len : 0)))
   const siblings = closeUps.filter(p => p.type === place.type)
   const groups = GROUPS.filter(g => closeUps.some(p => p.type === g))
@@ -153,8 +195,8 @@ export function StageScreen() {
   const onTap = (e: React.MouseEvent) => {
     const r = floorRef.current!.getBoundingClientRect()
     const [x, y] = [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H]
-    const nx = Math.min(1, Math.max(0, sq ? (x - MX) / G : x / W))
-    const ny = Math.min(1, Math.max(0, sq ? (y - MY) / GH : y / H))
+    const nx = Math.min(1, Math.max(0, x / W))
+    const ny = Math.min(1, Math.max(0, y / H))
     store.checkIn(place.id, nx, ny)
     setRipple({ x: toX(nx), y: toY(ny), k: Date.now() })
     navigator.vibrate?.(15)
@@ -174,8 +216,17 @@ export function StageScreen() {
           <i aria-hidden className="ph ph-caret-left" />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="kicker">{place.floor ? `Planta ${place.floor} · ${TYPES[place.type][0]}` : place.type === 'stage' ? `Stage ${place.n}` : TYPES[place.type][0]}</div>
-          <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{placeTitle(place)}</div>
+          {sq ? (
+            // Club: just the night's name, like the layout guide
+            <div className="title" style={{ fontSize: 24 }}>
+              {(s.venue?.event_name ?? '').split(' ')[0]} <span className="dim">{(s.venue?.event_name ?? '').split(' ').slice(1).join(' ')}</span>
+            </div>
+          ) : (
+            <>
+              <div className="kicker">{place.floor ? `Planta ${place.floor} · ${TYPES[place.type][0]}` : place.type === 'stage' ? `Stage ${place.n}` : TYPES[place.type][0]}</div>
+              <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{placeTitle(place)}</div>
+            </>
+          )}
         </div>
         <SyncPill sync={sync} />
       </div>
@@ -223,7 +274,16 @@ export function StageScreen() {
       )}
 
       <div style={{ margin: '0 14px' }}>
-        {place.type === 'stage' && (
+        {sq && lineup.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+            <SideTile id="m-wc1" icon="ph ph-toilet" label="WC" places={s.places} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} />
+            </div>
+            <SideTile id="m-balcon" icon="ph ph-stairs" label="I’m upstairs" places={s.places} />
+          </div>
+        )}
+        {place.type === 'stage' && !(sq && lineup.length > 0) && (
           <div style={{ height: 28, borderRadius: 'var(--radius-md) var(--radius-md) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10, letterSpacing: '.16em', color: 'var(--color-accent-200)', background: 'linear-gradient(180deg, var(--color-accent-800), transparent)', borderBottom: '1.5px solid var(--color-accent-300)', boxShadow: '0 6px 24px -10px var(--color-accent)' }}>
             <i aria-hidden className="ph ph-speaker-hifi" />
             {place.floor ? 'DJ BOOTH' : 'STAGE'}
@@ -236,7 +296,7 @@ export function StageScreen() {
             style={{ position: 'absolute', inset: 0, cursor: 'crosshair', overflow: 'hidden', background: 'radial-gradient(120% 55% at 50% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 70%)', borderRadius: place.type === 'stage' ? '0 0 var(--radius-lg) var(--radius-lg)' : 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}
           >
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: 'linear-gradient(var(--color-neutral-900) 1px, transparent 1px), linear-gradient(90deg, var(--color-neutral-900) 1px, transparent 1px)', backgroundSize: '22px 22px', opacity: 0.55 }} />
-            {sq && s.venue ? <PlanFloor v={floorView(s.venue, place.floor)} sh={sq} g={G} gh={GH} /> : <FloorArt p={place} h={H} maxLen={maxLen} />}
+            {sq ? <ClubFloor sh={sq} h={H} places={s.places} /> : <FloorArt p={place} h={H} maxLen={maxLen} />}
 
             {here.map(r => {
               const d = r.dot!
@@ -302,6 +362,7 @@ export function StageScreen() {
       <div style={{ padding: '10px 20px 0' }}>
         <SmsFallback />
       </div>
+      {djOpen && <DjSheet sets={lineup} now={now} onClose={() => setDjOpen(false)} />}
     </div>
   )
 }

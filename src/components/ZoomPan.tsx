@@ -11,7 +11,7 @@ interface View {
   ty: number
 }
 
-export function ZoomPan({ w, h, children, overlay, corner }: { w: number; h: number; children: (z: number) => ReactNode; overlay?: ReactNode; corner?: ReactNode }) {
+export function ZoomPan({ w, h, children, overlay, corner, doubleTap = true }: { w: number; h: number; children: (z: number) => ReactNode; overlay?: ReactNode; corner?: ReactNode; doubleTap?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const [view, setView] = useState<View>({ z: 1, tx: 0, ty: 0 })
   const [smooth, setSmooth] = useState(false) // animate button / double-tap zooms, not finger moves
@@ -42,6 +42,8 @@ export function ZoomPan({ w, h, children, overlay, corner }: { w: number; h: num
   const start = useRef<{ x: number; y: number; tx: number; ty: number; d: number; z: number; mx: number; my: number } | null>(null)
   const moved = useRef(false)
   const lastTap = useRef({ t: 0, x: 0, y: 0 })
+  const dbl = useRef(doubleTap)
+  dbl.current = doubleTap
 
   useEffect(() => {
     const el = ref.current!
@@ -97,7 +99,7 @@ export function ZoomPan({ w, h, children, overlay, corner }: { w: number; h: num
       // double tap: zoom in there, or back out if already close
       const now = Date.now()
       const l = lastTap.current
-      if (now - l.t < 320 && Math.hypot(e.clientX - l.x, e.clientY - l.y) < 30) {
+      if (dbl.current && now - l.t < 320 && Math.hypot(e.clientX - l.x, e.clientY - l.y) < 30) {
         const p = local(e.clientX, e.clientY)
         zoomAt(v.current.z > 2.6 ? 1 : v.current.z * 2.2, p.x, p.y, true)
         lastTap.current = { t: 0, x: 0, y: 0 }

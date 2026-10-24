@@ -114,14 +114,13 @@ export function ProfileSheet() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <i aria-hidden className="ph ph-gauge" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
+          <i aria-hidden className="ph ph-cell-signal-low" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
           <span style={{ flex: 1, fontSize: 14 }}>
-            Data saver
+            Low-signal mode · always on
             <span style={{ display: 'block', ...label }}>
-              {s.dataSaver ? 'Checks for news every minute and when a notification arrives. Friends’ photos load when you tap.' : 'Live updates. Uses more data and battery.'}
+              Updates only when you pin, open the app or tap refresh, with tiny requests that get through packed crowds. Photos load when you tap.
             </span>
           </span>
-          <Toggle on={s.dataSaver} onChange={v => store.setDataSaver(v)} label="Data saver" />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>

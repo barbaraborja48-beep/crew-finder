@@ -1,6 +1,7 @@
 // The DJ screen on the dance floor: who's playing right now, on a slow lava-lamp aura.
 // Runs off the phone's clock (corrected by the server's), so it needs no data at all.
 import { useState } from 'react'
+import { store } from '../lib/store'
 
 export interface DjSet {
   name: string
@@ -74,7 +75,7 @@ export function DjDisplay({ sets, now, onOpen }: { sets: DjSet[]; now: number; o
             `UP NEXT · IN ${inWords((ms(next!.start) - now) / 1000)}`
           )}
           {tag && (
-            <span style={{ marginLeft: 'auto', letterSpacing: '.02em' }}>
+            <span className="dj-day" style={{ marginLeft: 'auto', letterSpacing: '.02em' }}>
               <b>{tag.wd}</b>
               {tag.day}
             </span>
@@ -102,6 +103,11 @@ export function DjDisplay({ sets, now, onOpen }: { sets: DjSet[]; now: number; o
 export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; onClose: () => void }) {
   const { sorted, current, next } = lineupState(sets, now)
   const [page, setPage] = useState(0)
+  const [premium, setPremium] = useState<null | 'shazam' | 'steps'>(null)
+  const open = (f: 'shazam' | 'steps') => {
+    store.logFeature(f) // count who wants it
+    setPremium(f)
+  }
   const tag = sorted[0] ? dayTag(sorted[0].start) : null
   return (
     <div className="dj-sheet-bg" onClick={onClose}>
@@ -120,6 +126,10 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
             <i aria-hidden className="ph ph-x" />
           </button>
         </div>
+        {premium ? (
+          <Premium feature={premium} onBack={() => setPremium(null)} />
+        ) : (
+        <>
         <div className="dj-pages no-scrollbar" onScroll={e => setPage(Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth))}>
           <section className="dj-page" aria-label="Set times">
             {sorted.map(s => {
@@ -154,20 +164,20 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
             <div className="dj-count">{next ? countdown((ms(next.start) - now) / 1000) : '—'}</div>
             {next && <div className="dj-label" style={{ marginTop: 2 }}>at {hhmm(next.start)}</div>}
             <div className="dj-tiles">
-              <a className="dj-tile" href="shazam://" onClick={shazam}>
+              <button className="dj-tile" onClick={() => open('shazam')}>
                 <i aria-hidden className="ph-bold ph-waveform" />
                 <span>
                   <b>Shazam this</b>
                   What's playing?
                 </span>
-              </a>
-              <div className="dj-tile" aria-label="Steps tonight (preview)">
+              </button>
+              <button className="dj-tile" onClick={() => open('steps')}>
                 <i aria-hidden className="ph-bold ph-sneaker-move" />
                 <span>
-                  <b>8,412 steps</b>
-                  tonight · preview
+                  <b>Steps tonight</b>
+                  with Apple Health
                 </span>
-              </div>
+              </button>
             </div>
           </section>
         </div>
@@ -175,17 +185,72 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
           <i className={page === 0 ? 'on' : ''} />
           <i className={page === 1 ? 'on' : ''} />
         </div>
+        </>
+        )}
       </div>
     </div>
   )
 }
 
-/** Open the Shazam app; if it isn't installed, send people to get it. */
-function shazam(e: React.MouseEvent) {
-  e.preventDefault()
-  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
-  const store = ios ? 'https://apps.apple.com/app/shazam/id284993459' : 'https://play.google.com/store/apps/details?id=com.shazam.android'
-  const t = setTimeout(() => (window.location.href = store), 1500)
-  window.addEventListener('pagehide', () => clearTimeout(t), { once: true })
-  window.location.href = 'shazam://'
+const PREMIUM = {
+  shazam: { icon: 'ph-bold ph-waveform', title: 'Shazam from the DJ screen', text: 'Name the track that’s playing without leaving PinGü.' },
+  steps: { icon: 'ph-bold ph-sneaker-move', title: 'Your steps tonight', text: 'See how far you danced, from Apple Health.' },
+}
+
+/** "Coming in Premium" + a quick rating. Taps and ratings land in Barbara's Supabase logs. */
+function Premium({ feature, onBack }: { feature: 'shazam' | 'steps'; onBack: () => void }) {
+  const f = PREMIUM[feature]
+  const [stars, setStars] = useState(0)
+  const [comment, setComment] = useState('')
+  const [state, setState] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
+  const send = async () => {
+    setState('sending')
+    setState((await store.sendFeedback(feature, stars, comment)) ? 'sent' : 'failed')
+  }
+  return (
+    <section className="dj-page" style={{ position: 'relative', zIndex: 2, minHeight: 360 }}>
+      <i aria-hidden className={f.icon} style={{ fontSize: 34 }} />
+      <div className="dj-kicker" style={{ marginTop: 14 }}>COMING IN PINGÜ PREMIUM</div>
+      <div style={{ font: '500 26px/1.1 var(--font-body)', letterSpacing: '-.03em', marginTop: 4 }}>{f.title}</div>
+      <div className="dj-label" style={{ marginTop: 6 }}>{f.text} It’ll be part of a future Premium plan.</div>
+      {state === 'sent' ? (
+        <div style={{ marginTop: 28, font: '500 16px var(--font-body)' }}>
+          Thank you! <span style={{ opacity: 0.7 }}>We read every one.</span>
+        </div>
+      ) : (
+        <>
+          <div className="dj-label" style={{ marginTop: 22, color: '#fff' }}>How’s PinGü so far?</div>
+          <div role="radiogroup" aria-label="Rating" style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            {[1, 2, 3, 4, 5].map(n => (
+              <button key={n} role="radio" aria-checked={stars === n} aria-label={`${n} star${n > 1 ? 's' : ''}`} onClick={() => setStars(n)} style={{ border: 0, background: 'transparent', padding: 2, cursor: 'pointer', fontSize: 30, color: n <= stars ? '#ffc83b' : 'rgba(255,255,255,.35)', filter: n <= stars ? 'drop-shadow(0 0 6px #ffc83b)' : 'none' }}>
+                <i aria-hidden className={n <= stars ? 'ph-fill ph-star' : 'ph ph-star'} />
+              </button>
+            ))}
+          </div>
+          <textarea
+            value={comment}
+            onChange={e => setComment(e.target.value)}
+            maxLength={1000}
+            rows={3}
+            placeholder="Comments or ideas to make it better"
+            style={{ marginTop: 12, width: '100%', boxSizing: 'border-box', resize: 'none', border: 0, borderRadius: 14, padding: 12, background: 'rgba(0,0,0,.4)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.15)', color: '#fff', font: '400 14px var(--font-body)', outline: 'none' }}
+          />
+          {state === 'failed' && <div className="dj-label" style={{ marginTop: 6, color: '#ffd97a' }}>Couldn’t send, no signal? Try again in a moment.</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button className="btn btn-secondary" style={{ height: 42, flex: 'none' }} onClick={onBack}>
+              Back
+            </button>
+            <button className="btn btn-primary" style={{ height: 42, flex: 1 }} disabled={(!stars && !comment.trim()) || state === 'sending'} onClick={send}>
+              {state === 'sending' ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+        </>
+      )}
+      {state === 'sent' && (
+        <button className="btn btn-secondary" style={{ height: 42, marginTop: 'auto' }} onClick={onBack}>
+          Back to the lineup
+        </button>
+      )}
+    </section>
+  )
 }

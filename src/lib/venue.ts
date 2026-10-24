@@ -8,7 +8,7 @@ export type BoxShape = { kind: 'kiosk' | 'tables'; cx: number; cy: number; size:
  * `angle` is the direction of "right"; front is 90° before it. rows/cols: where the 3×3
  * zones split (0–1), when they aren't even thirds.
  */
-export type SquareShape = { kind: 'square'; cx: number; cy: number; w: number; h: number; angle: number; rows?: [number, number]; cols?: [number, number] }
+export type SquareShape = { kind: 'square'; cx: number; cy: number; w: number; h: number; angle: number; rows?: [number, number]; cols?: [number, number]; bulge?: number }
 /** Club venues: the patch of floor a place covers. Tap anywhere in it to pin there. No close-up. */
 export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean } // bg: whole-floor fallback, no icon
 export type Shape = LineShape | BoxShape | SquareShape | ZoneShape
@@ -50,6 +50,7 @@ export interface Venue {
   view_oy: number
   floors?: Floor[]
   default_meet?: string | null
+  lineup?: { name: string; start: string; end: string }[] // the DJ screen's set times
 }
 
 /** Venues you can start a crew at. The maps live in /public/assets. */
@@ -104,8 +105,14 @@ export const zone = (nx: number, ny: number) =>
 export function floorZone(sh: SquareShape, nx: number, ny: number) {
   const [r1, r2] = sh.rows ?? [1 / 3, 2 / 3]
   const [c1, c2] = sh.cols ?? [1 / 3, 2 / 3]
-  return `${ny < r1 ? 'front' : ny < r2 ? 'middle' : 'back'} ${nx < c1 ? 'left' : nx < c2 ? 'middle' : 'right'}`
+  if (ny < CORNER && (nx < CORNER || nx > 1 - CORNER)) return `front ${nx < 0.5 ? 'left' : 'right'} corner`
+  const dip = rowDip(sh, nx)
+  return `${ny < r1 + dip ? 'front' : ny < r2 + dip ? 'middle' : 'back'} ${nx < c1 ? 'left' : nx < c2 ? 'middle' : 'right'}`
 }
+/** The two spots either side of the DJ booth. */
+export const CORNER = 0.12
+/** Rows curve around the DJ like the crowd does: the row lines dip in the middle. */
+export const rowDip = (sh: SquareShape, nx: number) => (sh.bulge ?? 0) * (1 - (2 * nx - 1) ** 2)
 
 /** Stages and shaped places (bars, trucks, picnic) open a tap-where-you-are close-up. */
 export const hasCloseUp = (p: Place | undefined) => !!p && (p.type === 'stage' || (!!p.shape && p.shape.kind !== 'zone'))

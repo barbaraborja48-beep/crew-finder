@@ -88,7 +88,7 @@ export function Penguin({
   queued = false,
   acc = 0,
   signal = null,
-  saver = false,
+  saver: _saver = false,
 }: {
   color: string
   activity: Activity
@@ -99,7 +99,7 @@ export function Penguin({
   queued?: boolean // yours, not sent yet: drawn as a dashed outline
   acc?: number
   signal?: number | null // 0–3: how fast they move
-  saver?: boolean // data saver: small leaf badge
+  saver?: boolean // unused since low-signal mode became the only mode
 }) {
   const id = useId().replace(/:/g, '')
   const dark = `color-mix(in srgb, ${color} 60%, #07070b)`
@@ -194,13 +194,6 @@ export function Penguin({
         <text className="zz" x="30" y="6" fontSize="10" fontWeight="600" fill="#c9c9d1" fontFamily="Inter, sans-serif">
           z
         </text>
-      )}
-      {saver && !idle && (
-        // data saver: a little leaf
-        <g transform="translate(34 41)">
-          <circle r="5.2" fill="#07070b" stroke="#3bffb0" strokeWidth="1" />
-          <path d="M-2.4 2.2 Q-2.6 -2.6 2.6 -2.6 Q2.4 2.4 -2.4 2.2 z M-2.4 2.2 L1 -1" fill="#3bffb0" stroke="#07070b" strokeWidth=".5" />
-        </g>
       )}
     </svg>
   )

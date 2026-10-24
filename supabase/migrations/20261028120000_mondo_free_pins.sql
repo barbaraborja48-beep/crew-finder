@@ -15,7 +15,7 @@ where id = 'e1e0a000-0000-4000-8000-000000000002';
 insert into public.places (venue_id, id, type, name, near, n, x, y, floor, shape)
 select 'e1e0a000-0000-4000-8000-000000000002', id, type, name, near, n, x, y, floor, shape::jsonb from (values
   -- Planta 1
-  ('m-pista',   'stage',   'Dance floor', '',          1,    660, 662, 1,    '{"kind": "square", "cx": 788, "cy": 554, "w": 371, "h": 278, "angle": 50.5, "rows": [0.286, 0.674], "cols": [0.344, 0.668]}'),
+  ('m-pista',   'stage',   'Dance floor', '',          1,    788, 554, 1,    '{"kind": "square", "cx": 788, "cy": 554, "w": 371, "h": 278, "angle": 50.5, "rows": [0.286, 0.674], "cols": [0.344, 0.668], "bulge": 0.07}'),
   ('m-bar1',    'bar',     'Bar',         'WC',        null, 539, 410, 1,    '{"kind": "zone", "cx": 539, "cy": 410, "w": 170, "h": 150}'),
   ('m-bar2',    'bar',     'Bar',         'side wall', null, 497, 592, 1,    '{"kind": "zone", "cx": 497, "cy": 592, "w": 150, "h": 170}'),
   ('m-bar3',    'bar',     'Bar',         'entrance',  null, 980, 808, 1,    '{"kind": "zone", "cx": 980, "cy": 808, "w": 190, "h": 150}'),
