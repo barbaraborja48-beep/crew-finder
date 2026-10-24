@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
 import { agoLong, CORNER, hasCloseUp, isLine, placeTitle, rowDip, TYPES, where, type Place, type PlaceType, type SquareShape } from '../lib/venue'
@@ -170,6 +170,27 @@ export function StageScreen() {
   const s = useStore()
   const now = useNow(250)
   const floorRef = useRef<HTMLDivElement>(null)
+  const screenRef = useRef<HTMLDivElement>(null)
+  const footRef = useRef<HTMLDivElement>(null)
+  // Club floors stretch to fill the screen down to the footer, whatever the phone.
+  const [fitH, setFitH] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    const fit = () => {
+      const scr = screenRef.current
+      const floor = floorRef.current
+      const foot = footRef.current
+      if (!scr || !floor || !foot) return
+      const tab = document.querySelector<HTMLElement>('nav.tabbar')
+      const sr = scr.getBoundingClientRect()
+      const fr = floor.getBoundingClientRect()
+      const free = sr.height - (fr.top - sr.top + scr.scrollTop) - foot.offsetHeight - (tab?.offsetHeight ?? 0) - 16
+      const h = Math.round(free / (fr.width / W))
+      setFitH(prev => (prev === h ? prev : h))
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    return () => window.removeEventListener('resize', fit)
+  })
   const [ripple, setRipple] = useState<{ x: number; y: number; k: number } | null>(null)
   const [djOpen, setDjOpen] = useState(false)
   const closeUps = s.places.filter(hasCloseUp)
@@ -183,7 +204,7 @@ export function StageScreen() {
   if (!place) return <div className="screen" />
   // Club dance floors (Mondo) get the crowd's-eye layout with the DJ screen on top.
   const sq = place.shape?.kind === 'square' ? place.shape : null
-  const H = floorHeight(place)
+  const H = sq && fitH ? Math.min(760, Math.max(330, fitH)) : floorHeight(place)
   const lineup = s.venue?.lineup ?? []
   const toX = (nx: number) => nx * W
   const toY = (ny: number) => ny * H
@@ -210,7 +231,7 @@ export function StageScreen() {
   const chipLabel = (p: Place) => (p.type === 'stage' || !p.near ? p.name : p.near)
 
   return (
-    <div className="screen scroll no-scrollbar" style={{ paddingBottom: 'calc(var(--tabbar-h) + 12px)' }}>
+    <div ref={screenRef} className="screen scroll no-scrollbar" style={{ paddingBottom: 'calc(var(--tabbar-h) + 12px)' }}>
       <div style={{ padding: 'var(--hdr-top) 20px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="round" aria-label="Back to map" onClick={() => store.ui({ screen: 'map' })}>
           <i aria-hidden className="ph ph-caret-left" />
@@ -344,23 +365,25 @@ export function StageScreen() {
         </Scaled>
       </div>
 
-      <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-        {me && (
-          <span style={{ opacity: meLive ? 1 : 0.45 }}>
-            <Avatar name={me.name} color={me.color} acc={me.acc} size={34} />
-          </span>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 500 }}>{myLine}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{mySub}</div>
+      <div ref={footRef}>
+        <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {me && (
+            <span style={{ opacity: meLive ? 1 : 0.45 }}>
+              <Avatar name={me.name} color={me.color} acc={me.acc} size={34} />
+            </span>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>{myLine}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{mySub}</div>
+          </div>
+          <button className="btn btn-secondary" style={{ height: 34 }} onClick={() => store.ui({ sheet: true })}>
+            <i aria-hidden className={me ? statusOf(me)[0] : 'ph-fill ph-smiley'} />
+            Status
+          </button>
         </div>
-        <button className="btn btn-secondary" style={{ height: 34 }} onClick={() => store.ui({ sheet: true })}>
-          <i aria-hidden className={me ? statusOf(me)[0] : 'ph-fill ph-smiley'} />
-          Status
-        </button>
-      </div>
-      <div style={{ padding: '10px 20px 0' }}>
-        <SmsFallback />
+        <div style={{ padding: '10px 20px 0' }}>
+          <SmsFallback />
+        </div>
       </div>
       {djOpen && <DjSheet sets={lineup} now={now} onClose={() => setDjOpen(false)} />}
     </div>
