@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 import { store, useStore } from './lib/store'
 import { TabBar, Toast } from './components/common'
 import { MapScreen } from './screens/MapScreen'
@@ -35,6 +36,7 @@ export default function App() {
         </>
       )}
       <Toast />
+      <SpeedInsights />
     </div>
   )
 }
