@@ -13,7 +13,7 @@ const GROUPS: PlaceType[] = ['stage', 'bar', 'food', 'picnic']
 /** Close-up floor size: stages are tall, bars and trucks are wide and shallow. */
 function floorHeight(p: Place) {
   const k = p.shape?.kind
-  return k === 'counter' ? 260 : k === 'trucks' ? 240 : k === 'kiosk' ? 320 : k === 'tables' ? 300 : 420
+  return k === 'counter' ? 260 : k === 'trucks' ? 240 : k === 'kiosk' ? 320 : k === 'tables' ? 300 : k === 'square' ? 362 : 420
 }
 
 const dashed = 'var(--color-neutral-800)'
@@ -27,13 +27,13 @@ const solid = { background: 'linear-gradient(180deg, var(--color-accent-800), co
 /** What's drawn on the floor: the real thing at its relative size, plus zone guides. */
 function FloorArt({ p, h, maxLen }: { p: Place; h: number; maxLen: number }) {
   const sh = p.shape
-  if (!sh)
+  if (!sh || sh.kind === 'square' || sh.kind === 'zone')
     return (
       <>
         <VLine at="33.3%" /><VLine at="66.6%" /><HLine at="33.3%" /><HLine at="66.6%" />
         <Tag style={{ left: 8, top: 6 }}>FRONT</Tag>
         <Tag style={{ left: 8, top: 'calc(66.6% + 6px)' }}>BACK</Tag>
-        <div style={{ position: 'absolute', right: 10, bottom: 10, fontSize: 16, color: 'var(--color-neutral-600)', pointerEvents: 'none' }}><i aria-hidden className="ph ph-martini" /></div>
+        {!sh && <div style={{ position: 'absolute', right: 10, bottom: 10, fontSize: 16, color: 'var(--color-neutral-600)', pointerEvents: 'none' }}><i aria-hidden className="ph ph-martini" /></div>}
       </>
     )
   if (sh.kind === 'trucks')

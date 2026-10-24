@@ -3,7 +3,11 @@ export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'p
 /** Real outline on the map image (pixels). Places with a shape get a close-up view. */
 export type LineShape = { kind: 'counter' | 'trucks'; cx: number; cy: number; len: number; angle: number; depth: number }
 export type BoxShape = { kind: 'kiosk' | 'tables'; cx: number; cy: number; size: number }
-export type Shape = LineShape | BoxShape
+/** A dance floor at an angle: `angle` is the direction of "right" when facing the DJ, so front is 90° before it. */
+export type SquareShape = { kind: 'square'; cx: number; cy: number; size: number; angle: number }
+/** Club venues: the patch of floor a place covers. Tap anywhere in it to pin there. No close-up. */
+export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean } // bg: whole-floor fallback, no icon
+export type Shape = LineShape | BoxShape | SquareShape | ZoneShape
 export const isLine = (sh: Shape): sh is LineShape => sh.kind === 'counter' || sh.kind === 'trucks'
 
 export interface Place {
@@ -69,7 +73,7 @@ export const TYPES: Record<PlaceType, [label: string, icon: string]> = {
   picnic: ['Picnic', 'ph ph-picnic-table'],
   open: ['Open areas', 'ph ph-tree'],
   coat: ['Coat check', 'ph ph-coat-hanger'],
-  outside: ['Outside', 'ph ph-cigarette'],
+  outside: ['Smoke lounge', 'ph ph-cigarette'],
 }
 
 export const STATUS: [icon: string, label: string][] = [
@@ -93,7 +97,7 @@ export const zone = (nx: number, ny: number) =>
   `${ny < 0.333 ? 'front' : ny < 0.666 ? 'mid' : 'back'} ${nx < 0.333 ? 'L' : nx < 0.666 ? 'C' : 'R'}`
 
 /** Stages and shaped places (bars, trucks, picnic) open a tap-where-you-are close-up. */
-export const hasCloseUp = (p: Place | undefined) => !!p && (p.type === 'stage' || !!p.shape)
+export const hasCloseUp = (p: Place | undefined) => !!p && (p.type === 'stage' || (!!p.shape && p.shape.kind !== 'zone'))
 
 /** Where you are within a shaped place: "left end", "truck 4", "front"… */
 export function spot(p: Place, nx: number, ny: number) {
@@ -151,6 +155,11 @@ export const mapPos = (v: Venue, p: Place, nx: number, ny: number) => {
     const out = sh.depth / 2 + 6 + ny * 18 // standing in front of it
     return toMap(v, sh.cx + Math.cos(a) * along - Math.sin(a) * out, sh.cy + Math.sin(a) * along + Math.cos(a) * out)
   }
+  if (sh?.kind === 'square') {
+    const [x, y] = squarePoint(sh, nx, ny)
+    return toMap(v, x, y)
+  }
+  if (sh?.kind === 'zone') return toMap(v, sh.cx + (nx - 0.5) * sh.w, sh.cy + (ny - 0.5) * sh.h)
   if (sh) return toMap(v, sh.cx + (nx - 0.5) * sh.size * 1.4, sh.cy + (ny - 0.5) * sh.size * 1.4)
   const c = toMap(v, p.x, p.y)
   const k = p.type === 'stage' ? 1 : 0.5
@@ -165,9 +174,48 @@ export function outline(v: Venue, sh: Shape) {
     const [ux, uy, px, py] = [Math.cos(a), Math.sin(a), -Math.sin(a), Math.cos(a)]
     const [l, d] = [sh.len / 2, sh.depth / 2]
     pts = [[l, d], [-l, d], [-l, -d], [l, -d]].map(([u, w]) => [sh.cx + ux * u + px * w, sh.cy + uy * u + py * w])
+  } else if (sh.kind === 'square') {
+    pts = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([x, y]) => squarePoint(sh, x, y))
+  } else if (sh.kind === 'zone') {
+    const [w, h] = [sh.w / 2, sh.h / 2]
+    pts = [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => [sh.cx + x, sh.cy + y])
   } else {
     const h = sh.size / 2
     pts = [[-h, -h], [h, -h], [h, h], [-h, h]].map(([x, y]) => [sh.cx + x, sh.cy + y])
   }
   return pts.map(([x, y]) => toMap(v, x, y))
+}
+
+/** Close-up spot (nx right, ny back, 0–1) → map image px on an angled dance floor. */
+export function squarePoint(sh: SquareShape, nx: number, ny: number): [number, number] {
+  const a = (sh.angle * Math.PI) / 180
+  const [u, w] = [(nx - 0.5) * sh.size, (ny - 0.5) * sh.size] // right, back
+  return [sh.cx + Math.cos(a) * u - Math.sin(a) * w, sh.cy + Math.sin(a) * u + Math.cos(a) * w]
+}
+
+/**
+ * Club venues: which place a tap on the floor plan lands in (image px), and where
+ * inside it. The smallest matching area wins, so a bar beats "Main room".
+ */
+export function placeAt(places: Place[], floor: number, x: number, y: number) {
+  let best: { place: Place; nx: number; ny: number; area: number } | null = null
+  for (const p of places) {
+    const sh = p.shape
+    if (!sh || !onFloor(p, floor)) continue
+    let nx: number, ny: number, area: number
+    if (sh.kind === 'square') {
+      const a = (sh.angle * Math.PI) / 180
+      const [dx, dy] = [x - sh.cx, y - sh.cy]
+      nx = (dx * Math.cos(a) + dy * Math.sin(a)) / sh.size + 0.5
+      ny = (-dx * Math.sin(a) + dy * Math.cos(a)) / sh.size + 0.5
+      area = sh.size * sh.size
+    } else if (sh.kind === 'zone') {
+      nx = (x - sh.cx) / sh.w + 0.5
+      ny = (y - sh.cy) / sh.h + 0.5
+      area = sh.w * sh.h
+    } else continue
+    if (nx < 0 || nx > 1 || ny < 0 || ny > 1) continue
+    if (!best || area < best.area) best = { place: p, nx, ny, area }
+  }
+  return best && { place: best.place, nx: best.nx, ny: best.ny }
 }

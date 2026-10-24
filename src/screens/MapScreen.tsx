@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { fresh, pinned } from '../lib/rules'
-import { floorView, hasCloseUp, mapPos, onFloor, outline, toMap, TYPES, MAP_W, MAP_H, type PlaceType, type Venue } from '../lib/venue'
+import { floorView, hasCloseUp, mapPos, onFloor, outline, placeAt, squarePoint, toMap, TYPES, MAP_W, MAP_H, where, type Place, type PlaceType, type Venue } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
 import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill } from '../components/common'
@@ -31,6 +32,23 @@ export function MapScreen() {
     liveFriends.filter(r => store.place(r.dot!.place_id)?.floor === n).length + (meLive && store.place(mine!.place_id)?.floor === n ? 1 : 0)
   const liveFriends = rows.filter(r => r.live && r.dot)
   const seg = (on: boolean) => ({ background: on ? 'var(--color-accent-800)' : 'transparent', color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-400)' })
+
+  // Club venues: tap anywhere on the plan to pin that exact spot (after a confirm, so
+  // panning or a double-tap zoom never pins you by accident).
+  const [tapPin, setTapPin] = useState<{ x: number; y: number; place: Place; nx: number; ny: number } | null>(null)
+  const onPlanTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!v || !floors.length) return
+    const r = e.currentTarget.getBoundingClientRect()
+    const x = ((e.clientX - r.left) / r.width) * MAP_W
+    const y = ((e.clientY - r.top) / r.height) * MAP_H
+    const hit = placeAt(s.places, ui.floor, (x - v.view_ox) / v.view_scale, (y - v.view_oy) / v.view_scale)
+    store.ui({ areaSel: null })
+    if (hit) setTapPin({ x, y, ...hit })
+    else {
+      setTapPin(null)
+      store.toast('Tap inside the venue or the smoke lounge', 'ph ph-map-pin', 'var(--color-neutral-400)')
+    }
+  }
 
   const sel = store.place(ui.areaSel)
   const here = sel ? liveFriends.filter(r => r.dot!.place_id === sel.id) : []
@@ -80,6 +98,12 @@ export function MapScreen() {
           w={MAP_W}
           h={MAP_H}
           overlay={
+            <>
+            {floors.length > 0 && !tapPin && !sel && (
+              <div style={{ position: 'absolute', left: '50%', bottom: 10, transform: 'translateX(-50%)', zIndex: 3, pointerEvents: 'none', whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: 'rgba(255,255,255,.55)', padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,.6)' }}>
+                Tap the map to pin your spot
+              </div>
+            )}
             <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
               {typesHere.map(([k, [label, icon]]) => {
                 const on = isOn(k)
@@ -99,6 +123,7 @@ export function MapScreen() {
                 )
               })}
             </div>
+            </>
           }
           corner={
             floors.length > 1 && (
@@ -156,6 +181,7 @@ export function MapScreen() {
                     }}
                   />
                 )}
+                {floors.length > 0 && <div onClick={onPlanTap} style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }} />}
                 {ui.heat === 'crowd' && (
                   <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'screen', pointerEvents: 'none' }}>
                     {blobs.map(b => (
@@ -165,23 +191,49 @@ export function MapScreen() {
                 )}
                 {v && (
                   // Bars, the food truck row and picnic areas at their real size and angle. Tap for a close-up.
-                  <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
-                    {areas.filter(a => a.shape).map(a => {
+                  <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
+                    {areas.filter(a => a.shape && a.shape.kind !== 'zone').map(a => {
                       const here = (meLive && mine!.place_id === a.id) || liveFriends.some(r => r.dot!.place_id === a.id)
                       return (
                         <polygon
                           key={a.id}
                           points={outline(v, a.shape!).map(p => `${p.x},${p.y}`).join(' ')}
                           onClick={() => store.ui({ stage: a.id, screen: 'stage', areaSel: null })}
-                          style={{ cursor: 'pointer', fill: here ? 'color-mix(in srgb, var(--color-accent) 32%, transparent)' : 'color-mix(in srgb, var(--color-accent) 14%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 75%, transparent)', strokeWidth: inv, strokeDasharray: a.type === 'bar' ? undefined : `${3 * inv} ${2 * inv}` }}
+                          style={{ pointerEvents: 'auto', cursor: 'pointer', fill: here ? 'color-mix(in srgb, var(--color-accent) 32%, transparent)' : 'color-mix(in srgb, var(--color-accent) 14%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 75%, transparent)', strokeWidth: inv, strokeDasharray: a.type === 'bar' ? undefined : `${3 * inv} ${2 * inv}` }}
                         />
                       )
                     })}
+                    {areas.filter(a => a.type === 'outside' && a.shape?.kind === 'zone').map(a => (
+                      <Lounge key={a.id} v={v} p={a} inv={inv} />
+                    ))}
                   </svg>
                 )}
                 {v && isOn('stage') &&
                   stages.map(st => {
                     const p = toMap(v, st.x, st.y)
+                    const sq = st.shape?.kind === 'square' ? st.shape : null
+                    if (sq) {
+                      // Angled dance floor, 3×3 like the close-up. The bright edge is the front, facing the DJ.
+                      const at = (nx: number, ny: number) => { const [x, y] = squarePoint(sq, nx, ny); return toMap(v, x, y) }
+                      const line = (a: { x: number; y: number }, b: { x: number; y: number }, k: string, strong = false) => (
+                        <line key={k} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={strong ? 'var(--color-accent-300)' : 'color-mix(in srgb, var(--color-accent-300) 45%, transparent)'} strokeWidth={(strong ? 2 : 1) * inv} strokeDasharray={strong ? undefined : `${3 * inv} ${3 * inv}`} />
+                      )
+                      return (
+                        <div key={st.id}>
+                          <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
+                            <polygon points={outline(v, sq).map(q => `${q.x},${q.y}`).join(' ')} style={{ fill: 'color-mix(in srgb, var(--color-accent) 10%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 60%, transparent)', strokeWidth: inv }} />
+                            {[1 / 3, 2 / 3].flatMap(t => [line(at(t, 0), at(t, 1), `v${t}`), line(at(0, t), at(1, t), `h${t}`)])}
+                            {line(at(0, 0), at(1, 0), 'front', true)}
+                          </svg>
+                          <button
+                            onClick={() => store.ui({ stage: st.id, screen: 'stage' })}
+                            style={{ position: 'absolute', left: p.x, top: p.y, transform: `translate(-50%,-50%) scale(${inv})`, zIndex: 2, border: 0, cursor: 'pointer', fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 999, background: 'rgba(0,0,0,.72)', color: '#fff', boxShadow: 'var(--shadow-sm)', font: '500 10px var(--font-body)' }}
+                          >
+                            {st.name}
+                          </button>
+                        </div>
+                      )
+                    }
                     return (
                       <div key={st.id}>
                         <button
@@ -196,7 +248,7 @@ export function MapScreen() {
                     )
                   })}
                 {v &&
-                  areas.map(a => {
+                  areas.filter(a => !(a.shape?.kind === 'zone' && a.shape.bg)).map(a => {
                     const p = toMap(v, a.x, a.y)
                     const on = ui.areaSel === a.id
                     return (
@@ -215,6 +267,12 @@ export function MapScreen() {
                       </button>
                     )
                   })}
+                {tapPin && (
+                  <div style={{ position: 'absolute', left: tapPin.x, top: tapPin.y, transform: `translate(-50%,-50%) scale(${inv})`, pointerEvents: 'none', zIndex: 5 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid #fff', boxShadow: '0 0 12px var(--color-accent), inset 0 0 8px var(--color-accent)' }} />
+                    <div style={{ position: 'absolute', left: 0, top: 0, width: 22, height: 22, borderRadius: '50%', border: '1.5px solid var(--color-accent-300)', animation: 'ping 1.6s ease-out infinite' }} />
+                  </div>
+                )}
                 {penguins.map(pg => (
                   <button
                     key={pg.key}
@@ -271,6 +329,34 @@ export function MapScreen() {
         ))}
       </div>
 
+      {tapPin && (
+        <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(var(--tabbar-h) + 12px)', zIndex: 4, borderRadius: 20, background: 'var(--color-surface)', boxShadow: 'var(--shadow-lg)', padding: 14, display: 'flex', flexDirection: 'column', gap: 12, animation: 'rise .2s ease-out' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--color-accent-900)', boxShadow: '0 0 0 1px var(--color-accent-700)', display: 'grid', placeItems: 'center', fontSize: 20, color: 'var(--color-accent-200)' }}>
+              <i aria-hidden className={TYPES[tapPin.place.type][1]} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 500 }}>{where(tapPin.place, tapPin.nx, tapPin.ny)}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>Not right? Tap another spot on the map</div>
+            </div>
+            <button aria-label="Close" onClick={() => setTapPin(null)} style={{ width: 30, height: 30, border: 0, cursor: 'pointer', borderRadius: '50%', background: 'transparent', color: 'var(--color-neutral-400)', fontSize: 16 }}>
+              <i aria-hidden className="ph ph-x" />
+            </button>
+          </div>
+          <button
+            className="btn btn-primary btn-block"
+            style={{ height: 44 }}
+            onClick={() => {
+              store.checkIn(tapPin.place.id, tapPin.nx, tapPin.ny)
+              setTapPin(null)
+            }}
+          >
+            <i aria-hidden className="ph-bold ph-map-pin" />
+            Pin me here
+          </button>
+        </div>
+      )}
+
       {sel && (
         <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(var(--tabbar-h) + 12px)', zIndex: 4, borderRadius: 20, background: 'var(--color-surface)', boxShadow: 'var(--shadow-lg)', padding: 14, display: 'flex', flexDirection: 'column', gap: 12, animation: 'rise .2s ease-out' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -293,7 +379,9 @@ export function MapScreen() {
             className="btn btn-primary btn-block"
             style={{ height: 44 }}
             onClick={() => {
-              store.checkIn(sel.id, 0.5, 0.5, true)
+              // Club zones: stand somewhere in it, not all on the same pixel.
+              const j = () => 0.5 + (Math.random() - 0.5) * (sel.shape?.kind === 'zone' && !sel.shape.bg ? 0.5 : 0)
+              store.checkIn(sel.id, j(), j(), true)
               store.ui({ areaSel: null })
             }}
           >
@@ -346,4 +434,29 @@ function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number, floor: nu
     })
   }
   return out.sort((a, b) => a.y - b.y)
+}
+
+/** The smoke lounge: a little patio next to the club where smoking penguins hang out. */
+function Lounge({ v, p, inv }: { v: Venue; p: Place; inv: number }) {
+  const sh = p.shape as { cx: number; cy: number; w: number; h: number }
+  const a = toMap(v, sh.cx - sh.w / 2, sh.cy - sh.h / 2)
+  const b = toMap(v, sh.cx + sh.w / 2, sh.cy + sh.h / 2)
+  const [w, h] = [b.x - a.x, b.y - a.y]
+  const amber = '#ff8a3b'
+  const bench = (x: number, y: number, bw: number) => <rect x={a.x + x * w} y={a.y + y * h} width={bw * w} height={h * 0.035} rx={h * 0.015} fill="color-mix(in srgb, #ff8a3b 35%, #000)" />
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <rect x={a.x} y={a.y} width={w} height={h} rx={8} fill="rgba(255,138,59,.07)" stroke={amber} strokeOpacity={0.7} strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`} style={{ filter: `drop-shadow(0 0 4px ${amber})` }} />
+      {bench(0.12, 0.9, 0.3)}
+      {bench(0.58, 0.9, 0.3)}
+      {bench(0.08, 0.5, 0.06)}
+      <circle cx={a.x + w * 0.5} cy={a.y + h * 0.62} r={Math.min(w, h) * 0.05} fill="none" stroke={amber} strokeOpacity={0.5} strokeWidth={inv} />
+      <text x={a.x + w / 2} y={a.y + h * 0.26} textAnchor="middle" fontSize={7.5} fontWeight={600} fill={amber} fillOpacity={0.85} fontFamily="Inter, sans-serif" letterSpacing=".04em">
+        SMOKE
+      </text>
+      <text x={a.x + w / 2} y={a.y + h * 0.26 + 9} textAnchor="middle" fontSize={7.5} fontWeight={600} fill={amber} fillOpacity={0.85} fontFamily="Inter, sans-serif" letterSpacing=".04em">
+        LOUNGE
+      </text>
+    </g>
+  )
 }

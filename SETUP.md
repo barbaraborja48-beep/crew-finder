@@ -26,7 +26,8 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 6. New query again. Paste `supabase/migrations/20261025120000_pingu.sql` and **Run**. This adds penguin accessories, the signal speed and allows repeat colors.
 7. New query again. Paste `supabase/migrations/20261026120000_pins.sql` and **Run**. Pins stop expiring and their times are stamped by the server, so late or wrong-clock updates still show the right age.
 8. New query again. Paste `supabase/migrations/20261027120000_mondo_disko.sql` and **Run**. This adds the Mondo Disko venue (Sala But, two floors). The Halloween map doesn't change.
-9. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+9. New query again. Paste `supabase/migrations/20261028120000_mondo_free_pins.sql` and **Run**. Mondo Disko: tap anywhere to pin, the dance floor faces the DJ booth, and the smoke lounge.
+10. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
 
 > Already ran some of these before? Just run the ones you haven't. Each file is safe to run once on top of the previous ones.
 
