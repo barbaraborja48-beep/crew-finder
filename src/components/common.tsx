@@ -90,7 +90,12 @@ export function Toast() {
   return (
     <div key={toast.key} className="toast" role="status">
       <i aria-hidden className={toast.icon} style={{ color: toast.fg }} />
-      {toast.text}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.text}</span>
+      {toast.undo && (
+        <button onClick={() => store.undoPin()} style={{ border: 0, background: 'transparent', color: 'var(--color-accent-300)', font: '600 12px var(--font-body)', padding: '0 0 0 6px', cursor: 'pointer', flex: 'none' }}>
+          Undo
+        </button>
+      )}
     </div>
   )
 }
@@ -130,12 +135,17 @@ export function Freshness({ style }: { style?: CSSProperties }) {
     return () => clearInterval(t)
   }, [])
   const age = s.lastSync ? Math.floor((Date.now() - s.lastSync) / 1000) : null
+  const waiting = Object.keys(s.pending).length > 0
+  const clock = s.lastSync ? new Date(s.lastSync).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''
+  // No background updates, so say plainly how current the map is; tap to check now.
   const label = s.syncing
-    ? 'Updating…'
-    : age == null
-      ? 'Not updated yet'
-      : `Updated ${age < 15 ? 'just now' : age < 60 ? `${age}s ago` : age < 3600 ? `${Math.floor(age / 60)}m ago` : 'over an hour ago'}`
-  const stale = age == null || age > 180
+    ? 'Checking…'
+    : waiting && s.signal === 'none'
+      ? 'Not sent yet · retrying'
+      : age == null
+        ? 'Tap to update'
+        : `Up to date · ${clock}`
+  const stale = waiting || age == null || age > 180
   return (
     <button
       onClick={() => store.sync()}
@@ -152,7 +162,13 @@ export function SmsFallback() {
   const s = useStore()
   const me = store.me()
   const mine = store.myDot()
-  if (!me || !mine || me.ghost || !s.pending[mine.id] || s.signal !== 'none' || !pinned(mine, Date.now())) return null
+  // Offer a text once your pin has been stuck for 30 s (a message tells it to re-check then).
+  const [, tick] = useState(0)
+  useLayoutEffect(() => {
+    const t = setInterval(() => tick(n => n + 1), 5_000)
+    return () => clearInterval(t)
+  }, [])
+  if (!me || !mine || me.ghost || !s.pending[mine.id] || !pinned(mine, Date.now()) || Date.now() - mine.born < 30_000) return null
   const body = spotSms({
     name: me.name,
     where: where(store.place(mine.place_id), mine.nx, mine.ny),

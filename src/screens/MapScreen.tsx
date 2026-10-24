@@ -1,6 +1,6 @@
 import { store, useStore } from '../lib/store'
 import { fresh, pinned } from '../lib/rules'
-import { floorView, hasCloseUp, mapPos, onFloor, outline, toMap, TYPES, MAP_W, MAP_H, type PlaceType, type Venue } from '../lib/venue'
+import { floorView, hasCloseUp, mapPos, onFloor, outline, placeAt, toMap, TYPES, MAP_W, MAP_H, type Place, type PlaceType, type Venue } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
 import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill } from '../components/common'
@@ -31,6 +31,21 @@ export function MapScreen() {
     liveFriends.filter(r => store.place(r.dot!.place_id)?.floor === n).length + (meLive && store.place(mine!.place_id)?.floor === n ? 1 : 0)
   const liveFriends = rows.filter(r => r.live && r.dot)
   const seg = (on: boolean) => ({ background: on ? 'var(--color-accent-800)' : 'transparent', color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-400)' })
+
+  // Club venues: tap anywhere on the plan and you're pinned there, named after the nearest
+  // spot. The message that pops up has an Undo for mis-taps.
+  const onPlanTap = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!v || !floors.length) return
+    const r = e.currentTarget.getBoundingClientRect()
+    const x = ((e.clientX - r.left) / r.width) * MAP_W
+    const y = ((e.clientY - r.top) / r.height) * MAP_H
+    const hit = placeAt(s.places, ui.floor, (x - v.view_ox) / v.view_scale, (y - v.view_oy) / v.view_scale)
+    store.ui({ areaSel: null })
+    if (hit) {
+      store.checkIn(hit.place.id, hit.nx, hit.ny, false, true)
+      navigator.vibrate?.(15)
+    } else store.toast('Tap inside the venue or the smoking area', 'ph ph-map-pin', 'var(--color-neutral-400)')
+  }
 
   const sel = store.place(ui.areaSel)
   const here = sel ? liveFriends.filter(r => r.dot!.place_id === sel.id) : []
@@ -79,8 +94,16 @@ export function MapScreen() {
         <ZoomPan
           w={MAP_W}
           h={MAP_H}
+          doubleTap={!floors.length} // on club maps a tap pins you, so no double-tap zoom
           overlay={
-            <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
+            <>
+            {floors.length > 0 && !sel && (
+              <div style={{ position: 'absolute', left: '50%', top: 8, transform: 'translateX(-50%)', zIndex: 3, pointerEvents: 'none', whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: 'rgba(255,255,255,.55)', padding: '4px 10px', borderRadius: 999, background: 'rgba(0,0,0,.6)' }}>
+                Tap the map to pin your spot
+              </div>
+            )}
+            {/* Filters for the big festival map; a club plan is small enough to show everything. */}
+            {!floors.length && <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
               {typesHere.map(([k, [label, icon]]) => {
                 const on = isOn(k)
                 return (
@@ -98,7 +121,8 @@ export function MapScreen() {
                   </button>
                 )
               })}
-            </div>
+            </div>}
+            </>
           }
           corner={
             floors.length > 1 && (
@@ -156,6 +180,7 @@ export function MapScreen() {
                     }}
                   />
                 )}
+                {floors.length > 0 && <div onClick={onPlanTap} style={{ position: 'absolute', inset: 0, cursor: 'crosshair' }} />}
                 {ui.heat === 'crowd' && (
                   <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'screen', pointerEvents: 'none' }}>
                     {blobs.map(b => (
@@ -165,23 +190,28 @@ export function MapScreen() {
                 )}
                 {v && (
                   // Bars, the food truck row and picnic areas at their real size and angle. Tap for a close-up.
-                  <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
-                    {areas.filter(a => a.shape).map(a => {
+                  <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
+                    {areas.filter(a => a.shape && a.shape.kind !== 'zone').map(a => {
                       const here = (meLive && mine!.place_id === a.id) || liveFriends.some(r => r.dot!.place_id === a.id)
                       return (
                         <polygon
                           key={a.id}
                           points={outline(v, a.shape!).map(p => `${p.x},${p.y}`).join(' ')}
                           onClick={() => store.ui({ stage: a.id, screen: 'stage', areaSel: null })}
-                          style={{ cursor: 'pointer', fill: here ? 'color-mix(in srgb, var(--color-accent) 32%, transparent)' : 'color-mix(in srgb, var(--color-accent) 14%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 75%, transparent)', strokeWidth: inv, strokeDasharray: a.type === 'bar' ? undefined : `${3 * inv} ${2 * inv}` }}
+                          style={{ pointerEvents: 'auto', cursor: 'pointer', fill: here ? 'color-mix(in srgb, var(--color-accent) 32%, transparent)' : 'color-mix(in srgb, var(--color-accent) 14%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 75%, transparent)', strokeWidth: inv, strokeDasharray: a.type === 'bar' ? undefined : `${3 * inv} ${2 * inv}` }}
                         />
                       )
                     })}
+                    {areas.filter(a => a.type === 'outside' && a.shape?.kind === 'zone').map(a => (
+                      <Lounge key={a.id} v={v} p={a} inv={inv} />
+                    ))}
                   </svg>
                 )}
                 {v && isOn('stage') &&
                   stages.map(st => {
                     const p = toMap(v, st.x, st.y)
+                    // Club dance floor: nothing drawn, the plan already shows it; tap anywhere to pin.
+                    if (st.shape?.kind === 'square') return null
                     return (
                       <div key={st.id}>
                         <button
@@ -196,7 +226,7 @@ export function MapScreen() {
                     )
                   })}
                 {v &&
-                  areas.map(a => {
+                  areas.filter(a => !(a.shape?.kind === 'zone' && a.shape.bg)).map(a => {
                     const p = toMap(v, a.x, a.y)
                     const on = ui.areaSel === a.id
                     return (
@@ -293,7 +323,9 @@ export function MapScreen() {
             className="btn btn-primary btn-block"
             style={{ height: 44 }}
             onClick={() => {
-              store.checkIn(sel.id, 0.5, 0.5, true)
+              // Club zones: stand somewhere in it, not all on the same pixel.
+              const j = () => 0.5 + (Math.random() - 0.5) * (sel.shape?.kind === 'zone' && !sel.shape.bg ? 0.5 : 0)
+              store.checkIn(sel.id, j(), j(), true)
               store.ui({ areaSel: null })
             }}
           >
@@ -346,4 +378,21 @@ function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number, floor: nu
     })
   }
   return out.sort((a, b) => a.y - b.y)
+}
+
+/** The smoking area: the strip outside the building's front, shown from both floors. */
+function Lounge({ v, p, inv }: { v: Venue; p: Place; inv: number }) {
+  const sh = p.shape as { cx: number; cy: number; w: number; h: number }
+  const a = toMap(v, sh.cx - sh.w / 2, sh.cy - sh.h / 2)
+  const b = toMap(v, sh.cx + sh.w / 2, sh.cy + sh.h / 2)
+  const [w, h] = [b.x - a.x, b.y - a.y]
+  const teal = '#3bf0ff'
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <rect x={a.x} y={a.y} width={w} height={h} fill="rgba(0,120,120,.28)" stroke={teal} strokeOpacity={0.75} strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`} />
+      <text x={a.x + w / 2} y={a.y + h / 2 + 3} textAnchor="middle" fontSize={8} fontWeight={500} fill={teal} fillOpacity={0.9} fontFamily="Inter, sans-serif">
+        smoking area (outside)
+      </text>
+    </g>
+  )
 }

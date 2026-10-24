@@ -56,7 +56,7 @@ interface Place {
   type: string
   name: string
   near: string
-  shape: { kind: string } | null
+  shape: { kind: string; rows?: [number, number]; cols?: [number, number]; bulge?: number } | null
   floor?: number | null
 }
 
@@ -74,10 +74,19 @@ function spot(p: Place, nx: number, ny: number) {
   return ''
 }
 
+// Angled club dance floors name their zones in full: "front left", "middle middle"…
+function floorZone(sh: { rows?: [number, number]; cols?: [number, number]; bulge?: number }, nx: number, ny: number) {
+  const [r1, r2] = sh.rows ?? [1 / 3, 2 / 3]
+  const [c1, c2] = sh.cols ?? [1 / 3, 2 / 3]
+  if (ny < 0.12 && (nx < 0.12 || nx > 0.88)) return `front ${nx < 0.5 ? 'left' : 'right'} corner`
+  const dip = (sh.bulge ?? 0) * (1 - (2 * nx - 1) ** 2)
+  return `${ny < r1 + dip ? 'front' : ny < r2 + dip ? 'middle' : 'back'} ${nx < c1 ? 'left' : nx < c2 ? 'middle' : 'right'}`
+}
+
 function where(p: Place | undefined, nx = 0.5, ny = 0.5) {
   if (!p) return 'somewhere'
   const fl = p.floor ? ` · Planta ${p.floor}` : ''
-  if (p.type === 'stage') return `${p.name} · ${zone(nx, ny)}${fl}`
+  if (p.type === 'stage') return `${p.name} · ${p.shape?.kind === 'square' ? floorZone(p.shape, nx, ny) : zone(nx, ny)}${fl}`
   const base = p.near ? `${p.name} · by ${p.near}` : p.name
   const s = spot(p, nx, ny)
   return `${s ? `${base} · ${s}` : base}${fl}`
