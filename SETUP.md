@@ -24,7 +24,8 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 4. New query again. Paste `supabase/migrations/20261023120000_map_profile_push.sql` and **Run**. This adds all 8 bars, the picnic areas and food truck shapes, profile editing, chat history and notifications.
 5. New query again. Paste `supabase/migrations/20261024120000_low_data_sync.sql` and **Run**. This is the low-data sync (one small request per update).
 6. New query again. Paste `supabase/migrations/20261025120000_pingu.sql` and **Run**. This adds penguin accessories, the signal speed and allows repeat colors.
-7. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+7. New query again. Paste `supabase/migrations/20261026120000_pins.sql` and **Run**. Pins stop expiring and their times are stamped by the server, so late or wrong-clock updates still show the right age.
+8. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
 
 > Already ran some of these before? Just run the ones you haven't. Each file is safe to run once on top of the previous ones.
 

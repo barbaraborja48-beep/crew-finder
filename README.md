@@ -48,7 +48,7 @@ npm test                     # check-in rule tests
 npm run build                # production build + service worker
 ```
 
-`supabase/tests/` has a SQL test of every RLS policy and RPC. It runs on plain Postgres: load `supabase_stub.sql`, then all migrations, then `rls_and_rpc.sql` (six `ERROR` lines expected, each a blocked action), `push_and_profile.sql` (five expected), `low_data_sync.sql` or `pingu.sql`.
+`supabase/tests/` has a SQL test of every RLS policy and RPC. It runs on plain Postgres: load `supabase_stub.sql`, then all migrations, then `rls_and_rpc.sql` (six `ERROR` lines expected, each a blocked action), `push_and_profile.sql` (five expected), `low_data_sync.sql`, `pingu.sql` or `pins.sql`.
 
 ## Not in the web version
 
