@@ -3,6 +3,7 @@ import { store, useStore, type Screen } from '../lib/store'
 import { alive } from '../lib/rules'
 import { hasCloseUp, STATUS, where } from '../lib/venue'
 import { spotSms, smsHref } from '../lib/sms'
+import { Penguin } from './Penguin'
 import type { SyncDef } from '../lib/view'
 
 /** Lays out children at a fixed design size (e.g. 390×346) and scales to the phone's width. */
@@ -41,7 +42,7 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
       aria-checked={on}
       aria-label={label}
       onClick={() => onChange(!on)}
-      style={{ background: on ? 'var(--color-accent-600)' : 'var(--color-neutral-800)' }}
+      style={{ background: on ? 'var(--color-accent-600)' : 'var(--color-neutral-800)', boxShadow: on ? '0 0 16px -2px var(--color-accent-500)' : 'none' }}
     >
       <span style={{ left: on ? 21 : 3 }} />
     </button>
@@ -67,7 +68,8 @@ export function TabBar() {
       {TABS.map(([k, label, icon]) => (
         <button
           key={k}
-          style={{ color: screen === k ? 'var(--color-accent-200)' : 'var(--color-neutral-500)' }}
+          className={screen === k ? 'on' : ''}
+          style={{ color: screen === k ? '#fff' : 'var(--color-neutral-500)' }}
           onClick={() => {
             const mine = store.myDot()
             const onStage = mine && alive(mine, Date.now()) && hasCloseUp(store.place(mine.place_id))
@@ -93,10 +95,16 @@ export function Toast() {
   )
 }
 
-export function Avatar({ name, color, size = 40 }: { name: string; color: string; size?: number }) {
+/** Your penguin's face in a glowing circle: used for profile, crew lists and chat. */
+export function Avatar({ name, color, acc = 0, size = 40 }: { name: string; color: string; acc?: number; size?: number }) {
   return (
-    <span style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: `color-mix(in srgb, ${color} 12%, var(--color-surface))`, boxShadow: `inset 0 0 0 1.5px ${color}, 0 0 12px -2px ${color}`, color, display: 'grid', placeItems: 'center', font: `500 ${Math.round(size * 0.42)}px var(--font-body)` }}>
-      {(name.trim()[0] ?? '?').toUpperCase()}
+    <span
+      title={name}
+      style={{ width: size, height: size, flex: 'none', borderRadius: '50%', overflow: 'hidden', position: 'relative', background: `radial-gradient(circle at 50% 70%, color-mix(in srgb, ${color} 34%, #000), #050508 72%)`, boxShadow: `inset 0 0 0 1.5px ${color}, 0 0 14px -3px ${color}`, display: 'block' }}
+    >
+      <span style={{ position: 'absolute', left: '50%', top: '14%', transform: 'translateX(-50%)' }}>
+        <Penguin color={color} activity="chill" seed={name} size={size * 0.92} acc={acc} animate={false} />
+      </span>
     </span>
   )
 }
@@ -108,7 +116,7 @@ export function ProfileButton() {
   if (!me) return null
   return (
     <button aria-label="Your profile" onClick={() => store.ui({ sheet: true })} style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: '50%' }}>
-      <Avatar name={me.name} color={me.color} />
+      <Avatar name={me.name} color={me.color} acc={me.acc} />
     </button>
   )
 }

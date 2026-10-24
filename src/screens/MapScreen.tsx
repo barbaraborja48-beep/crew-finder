@@ -1,9 +1,14 @@
 import { store, useStore } from '../lib/store'
 import { alive } from '../lib/rules'
-import { glow, hasCloseUp, mapPos, outline, toMap, TYPES, MAP_W, MAP_H, ME, type PlaceType } from '../lib/venue'
-import { useNow, mySync, crewRows, statusOf, ageLabel } from '../lib/view'
+import { hasCloseUp, mapPos, outline, toMap, TYPES, MAP_W, MAP_H, type PlaceType, type Venue } from '../lib/venue'
+import { useNow, mySync, crewRows, statusOf, ageLabel, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
-import { Freshness, ProfileButton, Scaled, SmsFallback, SyncPill } from '../components/common'
+import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill } from '../components/common'
+import { ZoomPan } from '../components/ZoomPan'
+import { Penguin } from '../components/Penguin'
+import { activityFor, type Activity } from '../lib/penguin'
+import { fraction } from '../lib/rules'
+import type { State } from '../lib/store'
 
 export function MapScreen() {
   const s = useStore()
@@ -38,7 +43,16 @@ export function MapScreen() {
       <div style={{ padding: 'var(--hdr-top) 20px 10px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
           <div className="kicker">{v?.name ?? s.crew?.name}</div>
-          <div className="title">{v?.event_name || s.crew?.name}</div>
+          <div className="title">
+            {(() => {
+              const [first, ...rest] = (v?.event_name || s.crew?.name || '').split(' ')
+              return (
+                <>
+                  {first} <span className="dim">{rest.join(' ')}</span>
+                </>
+              )
+            })()}
+          </div>
         </div>
         <ProfileButton />
       </div>
@@ -54,115 +68,138 @@ export function MapScreen() {
       </div>
 
       <Scaled w={MAP_W} h={MAP_H}>
-        {v && (
-          <div
-            style={{
-              position: 'absolute', inset: 0,
-              background: `url(${v.map_url}) ${v.view_ox}px ${v.view_oy}px / ${v.map_w * v.view_scale}px auto no-repeat`,
-              filter: 'saturate(.3) brightness(.5)',
-            }}
-          />
-        )}
-        {ui.heat === 'crowd' && (
-          <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'screen', pointerEvents: 'none' }}>
-            {blobs.map(b => (
-              <div key={b.id} style={{ position: 'absolute', left: b.x, top: b.y, width: b.s, height: b.s, transform: 'translate(-50%,-50%)', borderRadius: '50%', background: `radial-gradient(${b.c}, transparent 68%)` }} />
-            ))}
-          </div>
-        )}
-        {v && (
-          // Bars, the food truck row and picnic areas at their real size and angle. Tap for a close-up.
-          <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
-            {areas.filter(a => a.shape).map(a => {
-              const here = (meLive && mine!.place_id === a.id) || liveFriends.some(r => r.dot!.place_id === a.id)
-              return (
-                <polygon
-                  key={a.id}
-                  points={outline(v, a.shape!).map(p => `${p.x},${p.y}`).join(' ')}
-                  onClick={() => store.ui({ stage: a.id, screen: 'stage', areaSel: null })}
-                  style={{ cursor: 'pointer', fill: here ? 'color-mix(in srgb, var(--color-accent) 30%, transparent)' : 'color-mix(in srgb, var(--color-accent) 14%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 70%, transparent)', strokeWidth: 1, strokeDasharray: a.type === 'bar' ? undefined : '3 2' }}
-                />
-              )
-            })}
-          </svg>
-        )}
-        {v && ui.types.stage &&
-          stages.map(st => {
-            const p = toMap(v, st.x, st.y)
-            return (
-              <div key={st.id}>
-                <button
-                  aria-label={st.name}
-                  onClick={() => store.ui({ stage: st.id, screen: 'stage' })}
-                  style={{ position: 'absolute', left: p.x, top: p.y, transform: 'translate(-50%,-50%)', width: 46, height: 46, border: 0, cursor: 'pointer', borderRadius: '50%', padding: 0, background: 'transparent', boxShadow: 'inset 0 0 0 1px color-mix(in srgb, var(--color-accent-300) 50%, transparent)' }}
-                />
-                <div style={{ position: 'absolute', left: p.x, top: p.y + 24, transform: 'translateX(-50%)', pointerEvents: 'none', fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap', padding: '2px 7px', borderRadius: 999, background: 'rgba(22,24,38,.85)', color: 'var(--color-neutral-200)', boxShadow: 'var(--shadow-sm)' }}>
-                  {st.name}
-                </div>
-              </div>
+        <ZoomPan
+          w={MAP_W}
+          h={MAP_H}
+          overlay={
+            <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
+              {(Object.entries(TYPES) as [PlaceType, [string, string]][]).map(([k, [label, icon]]) => {
+                const on = ui.types[k]
+                return (
+                  <button
+                    key={k}
+                    onClick={() => store.ui({ types: { ...ui.types, [k]: !on }, areaSel: null })}
+                    style={{
+                      flex: 'none', height: 26, border: 0, cursor: 'pointer', padding: '0 10px', borderRadius: 999, font: '500 10px var(--font-body)',
+                      background: on ? 'color-mix(in srgb, var(--color-accent-600) 22%, rgba(0,0,0,.7))' : 'rgba(0,0,0,.72)', color: on ? '#fff' : 'var(--color-neutral-400)',
+                      boxShadow: on ? '0 0 0 1px var(--color-accent-500), 0 0 14px -6px var(--color-accent)' : 'var(--shadow-sm)', display: 'flex', alignItems: 'center', gap: 4, backdropFilter: 'blur(8px)',
+                    }}
+                  >
+                    <i aria-hidden className={icon} style={{ fontSize: 12 }} />
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          }
+        >
+          {z => {
+            const inv = 1 / z
+            // Penguins grow a bit as you zoom (pins and labels stay the same size).
+            const grow = Math.pow(z, 0.75) * inv
+            const penguins = v && ui.heat === 'crew' ? mapPenguins(s, v, rows, now) : []
+            // Name tags: under the penguin, or above its head if another penguin is right there.
+            const labelAbove = new Set<string>()
+            penguins.forEach((a, i) =>
+              penguins.slice(0, i).forEach(b => {
+                if (Math.abs(a.x - b.x) * z < 34 && Math.abs(a.y - b.y) * z < 26 && !labelAbove.has(b.key)) labelAbove.add(a.key)
+              }),
             )
-          })}
-        {v &&
-          areas.map(a => {
-            const p = toMap(v, a.x, a.y)
-            const on = ui.areaSel === a.id
-            const mineHere = meLive && mine!.place_id === a.id
-            const friendHere = liveFriends.find(r => r.dot!.place_id === a.id)
-            const dot = mineHere ? ME : friendHere?.member.color
             return (
-              <button
-                key={a.id}
-                aria-label={a.name}
-                onClick={() => (hasCloseUp(a) ? store.ui({ stage: a.id, screen: 'stage', areaSel: null }) : store.ui({ areaSel: on ? null : a.id }))}
-                style={{
-                  position: 'absolute', left: p.x, top: p.y, transform: 'translate(-50%,-50%)', width: 24, height: 24, border: 0, cursor: 'pointer', borderRadius: '50%', padding: 0, zIndex: 2,
-                  background: on ? 'var(--color-accent-800)' : 'var(--color-surface)', color: on ? 'var(--color-accent-100)' : 'var(--color-neutral-200)',
-                  boxShadow: dot ? `0 0 0 1.5px ${dot}, 0 0 10px ${dot}` : on ? '0 0 0 1.5px var(--color-accent)' : 'var(--shadow-sm)',
-                  display: 'grid', placeItems: 'center', fontSize: 13,
-                }}
-              >
-                <i aria-hidden className={TYPES[a.type][1]} />
-              </button>
+              <>
+                {v && (
+                  <div
+                    style={{
+                      position: 'absolute', inset: 0,
+                      background: `url(${v.map_url}) ${v.view_ox}px ${v.view_oy}px / ${v.map_w * v.view_scale}px auto no-repeat`,
+                      filter: 'saturate(.55) brightness(.42) contrast(1.15)',
+                    }}
+                  />
+                )}
+                {ui.heat === 'crowd' && (
+                  <div style={{ position: 'absolute', inset: 0, mixBlendMode: 'screen', pointerEvents: 'none' }}>
+                    {blobs.map(b => (
+                      <div key={b.id} style={{ position: 'absolute', left: b.x, top: b.y, width: b.s, height: b.s, transform: 'translate(-50%,-50%)', borderRadius: '50%', background: `radial-gradient(${b.c}, transparent 68%)` }} />
+                    ))}
+                  </div>
+                )}
+                {v && (
+                  // Bars, the food truck row and picnic areas at their real size and angle. Tap for a close-up.
+                  <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible' }}>
+                    {areas.filter(a => a.shape).map(a => {
+                      const here = (meLive && mine!.place_id === a.id) || liveFriends.some(r => r.dot!.place_id === a.id)
+                      return (
+                        <polygon
+                          key={a.id}
+                          points={outline(v, a.shape!).map(p => `${p.x},${p.y}`).join(' ')}
+                          onClick={() => store.ui({ stage: a.id, screen: 'stage', areaSel: null })}
+                          style={{ cursor: 'pointer', fill: here ? 'color-mix(in srgb, var(--color-accent) 32%, transparent)' : 'color-mix(in srgb, var(--color-accent) 14%, transparent)', stroke: 'color-mix(in srgb, var(--color-accent-300) 75%, transparent)', strokeWidth: inv, strokeDasharray: a.type === 'bar' ? undefined : `${3 * inv} ${2 * inv}` }}
+                        />
+                      )
+                    })}
+                  </svg>
+                )}
+                {v && ui.types.stage &&
+                  stages.map(st => {
+                    const p = toMap(v, st.x, st.y)
+                    return (
+                      <div key={st.id}>
+                        <button
+                          aria-label={st.name}
+                          onClick={() => store.ui({ stage: st.id, screen: 'stage' })}
+                          style={{ position: 'absolute', left: p.x, top: p.y, transform: 'translate(-50%,-50%)', width: 46, height: 46, border: 0, cursor: 'pointer', borderRadius: '50%', padding: 0, background: 'transparent', boxShadow: `inset 0 0 0 ${inv}px color-mix(in srgb, var(--color-accent-300) 55%, transparent)` }}
+                        />
+                        <div style={{ position: 'absolute', left: p.x, top: p.y + 23, transform: `translateX(-50%) scale(${inv})`, transformOrigin: '50% 0', pointerEvents: 'none', fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 999, background: 'rgba(0,0,0,.72)', color: '#fff', boxShadow: 'var(--shadow-sm)' }}>
+                          {st.name}
+                        </div>
+                      </div>
+                    )
+                  })}
+                {v &&
+                  areas.map(a => {
+                    const p = toMap(v, a.x, a.y)
+                    const on = ui.areaSel === a.id
+                    return (
+                      <button
+                        key={a.id}
+                        aria-label={a.name}
+                        onClick={() => (hasCloseUp(a) ? store.ui({ stage: a.id, screen: 'stage', areaSel: null }) : store.ui({ areaSel: on ? null : a.id }))}
+                        style={{
+                          position: 'absolute', left: p.x, top: p.y, transform: `translate(-50%,-50%) scale(${Math.max(inv, 0.45)})`, width: 24, height: 24, border: 0, cursor: 'pointer', borderRadius: '50%', padding: 0, zIndex: 2,
+                          background: on ? 'var(--color-accent-700)' : 'rgba(10,10,16,.9)', color: on ? '#fff' : 'var(--color-neutral-200)',
+                          boxShadow: on ? '0 0 0 1.5px var(--color-accent-300), 0 0 12px var(--color-accent)' : 'var(--shadow-sm)',
+                          display: 'grid', placeItems: 'center', fontSize: 13,
+                        }}
+                      >
+                        <i aria-hidden className={TYPES[a.type][1]} />
+                      </button>
+                    )
+                  })}
+                {penguins.map(pg => (
+                  <button
+                    key={pg.key}
+                    aria-label={pg.mine ? 'You' : pg.name}
+                    onClick={() => (pg.mine ? store.ui({ sheet: true }) : store.ui({ findId: pg.key, screen: 'find' }))}
+                    style={{ position: 'absolute', left: pg.x, top: pg.y, zIndex: 4, border: 0, padding: 0, background: 'transparent', cursor: 'pointer', transform: `translate(-50%, -88%) scale(${grow})`, transformOrigin: '50% 88%' }}
+                  >
+                    <Penguin color={pg.color} acc={pg.acc} activity={pg.activity} seed={pg.key} size={18} glow={pg.glow} signal={pg.signal} saver={pg.saver} queued={pg.queued} />
+                    {(z >= 1.6 || !pg.live) && (
+                      <span
+                        style={{
+                          position: 'absolute', left: '50%', ...(labelAbove.has(pg.key) ? { bottom: '100%' } : { top: '96%' }),
+                          transform: `translateX(-50%) scale(${Math.min(1, 1.15 / Math.pow(z, 0.75))})`, transformOrigin: labelAbove.has(pg.key) ? '50% 100%' : '50% 0',
+                          fontSize: 8, fontWeight: 500, whiteSpace: 'nowrap', padding: '1px 5px', borderRadius: 999, background: 'rgba(0,0,0,.75)', color: '#fff', boxShadow: `0 0 0 .5px ${pg.color}`,
+                        }}
+                      >
+                        {pg.live ? (pg.mine ? 'You' : pg.name) : `${pg.name} · ${pg.age}`}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </>
             )
-          })}
-        <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
-          {(Object.entries(TYPES) as [PlaceType, [string, string]][]).map(([k, [label, icon]]) => {
-            const on = ui.types[k]
-            return (
-              <button
-                key={k}
-                onClick={() => store.ui({ types: { ...ui.types, [k]: !on }, areaSel: null })}
-                style={{
-                  flex: 'none', height: 26, border: 0, cursor: 'pointer', padding: '0 9px', borderRadius: 999, font: '500 10px var(--font-body)',
-                  background: on ? 'var(--color-accent-900)' : 'rgba(22,24,38,.85)', color: on ? 'var(--color-accent-200)' : 'var(--color-neutral-400)',
-                  boxShadow: on ? '0 0 0 1px var(--color-accent-600)' : 'var(--shadow-sm)', display: 'flex', alignItems: 'center', gap: 4, backdropFilter: 'blur(8px)',
-                }}
-              >
-                <i aria-hidden className={icon} style={{ fontSize: 12 }} />
-                {label}
-              </button>
-            )
-          })}
-        </div>
-        {ui.heat === 'crew' && v && (
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
-            {rows.filter(r => r.dot).map(r => {
-              const pl = store.place(r.dot!.place_id)
-              if (!pl) return null
-              const p = mapPos(v, pl, r.dot!.nx, r.dot!.ny)
-              return (
-                <div key={r.member.id} style={{ position: 'absolute', left: p.x, top: p.y, width: 0, height: 0, opacity: r.live ? 1 : 0.3 }}>
-                  <div style={{ position: 'absolute', width: 10, height: 10, borderRadius: '50%', transform: 'translate(-50%,-50%)', background: r.member.color, boxShadow: r.live ? glow(r.member.color, 0.5) : 'none' }} />
-                  {!r.live && <div style={{ position: 'absolute', left: 8, top: -7, fontSize: 9, fontWeight: 500, color: 'var(--color-neutral-200)', whiteSpace: 'nowrap' }}>{ageLabel(r.ageS)}</div>}
-                </div>
-              )
-            })}
-            {meLive && store.place(mine!.place_id) && (() => {
-              const p = mapPos(v, store.place(mine!.place_id)!, mine!.nx, mine!.ny)
-              return <div style={{ position: 'absolute', left: p.x, top: p.y, width: 10, height: 10, borderRadius: '50%', transform: 'translate(-50%,-50%)', background: ME, boxShadow: glow(ME, 0.6) }} />
-            })()}
-          </div>
-        )}
+          }}
+        </ZoomPan>
       </Scaled>
 
       <div className="scroll no-scrollbar" style={{ flex: 1, marginTop: -12, position: 'relative', background: 'var(--color-surface)', borderRadius: '24px 24px 0 0', boxShadow: 'var(--shadow-sm)', padding: '8px 20px calc(var(--tabbar-h) + 12px)' }}>
@@ -182,7 +219,9 @@ export function MapScreen() {
             onClick={() => !r.member.ghost && store.ui({ findId: r.member.id, screen: 'find' })}
             style={{ width: '100%', border: 0, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: '1px solid var(--color-neutral-900)', textAlign: 'left', opacity: r.member.ghost ? 0.5 : rowOpacity(r.ageS) }}
           >
-            <span style={{ width: 11, height: 11, borderRadius: '50%', flex: 'none', background: r.member.ghost ? 'transparent' : r.member.color, boxShadow: r.member.ghost ? 'inset 0 0 0 1.5px var(--color-neutral-600)' : r.live ? glow(r.member.color, 0.3) : 'none' }} />
+            <span style={{ opacity: r.member.ghost ? 0.4 : 1 }}>
+              <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={30} />
+            </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 14, fontWeight: 500 }}>{r.member.name}</span>
               <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{r.where}</span>
@@ -226,4 +265,47 @@ export function MapScreen() {
       )}
     </div>
   )
+}
+
+interface MapPenguin {
+  key: string
+  name: string
+  mine: boolean
+  x: number
+  y: number
+  color: string
+  acc: number
+  activity: Activity
+  live: boolean
+  glow: number
+  signal: number | null
+  saver: boolean
+  queued: boolean
+  age: string
+}
+
+/** Everyone's penguin on the overview map (yours too), sorted back to front. */
+function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number): MapPenguin[] {
+  const out: MapPenguin[] = []
+  for (const r of rows) {
+    const pl = r.dot && store.place(r.dot.place_id)
+    if (!r.dot || !pl) continue
+    const p = mapPos(v, pl, r.dot.nx, r.dot.ny)
+    out.push({
+      key: r.member.id, name: r.member.name, mine: false, ...p, color: r.member.color, acc: r.member.acc ?? 0,
+      activity: activityFor(pl.type, r.member.status, r.live), live: r.live, glow: r.live ? fraction(r.dot, now) : 0,
+      signal: r.member.net ?? null, saver: !!r.member.saver, queued: false, age: ageLabel(r.ageS),
+    })
+  }
+  const me = store.me()
+  const mine = store.myDot()
+  const pl = mine && store.place(mine.place_id)
+  if (me && mine && pl && alive(mine, now)) {
+    out.push({
+      key: me.id, name: me.name, mine: true, ...mapPos(v, pl, mine.nx, mine.ny), color: me.color, acc: me.acc ?? 0,
+      activity: activityFor(pl.type, me.status, true), live: true, glow: fraction(mine, now),
+      signal: s.myNet, saver: s.dataSaver, queued: !!s.pending[mine.id] || me.ghost, age: '',
+    })
+  }
+  return out.sort((a, b) => a.y - b.y)
 }

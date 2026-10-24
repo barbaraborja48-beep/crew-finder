@@ -16,8 +16,9 @@ export default function App() {
   }, [])
 
   const screen = s.ui.screen
+  const me = s.members.find(m => m.id === s.session?.memberId)
   return (
-    <div className="app">
+    <div className="app" style={{ ['--aura' as string]: me?.color ?? '#a98bff' }}>
       {s.phase === 'unconfigured' && <Unconfigured />}
       {s.phase === 'welcome' && <Welcome />}
       {s.phase === 'join' && <Join />}

@@ -3,7 +3,7 @@ import { store, useStore, type Message, type State } from '../lib/store'
 import { alive } from '../lib/rules'
 import { ago, ME, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
-import { Freshness } from '../components/common'
+import { Avatar, Freshness } from '../components/common'
 
 type Item =
   | { kind: 'msg'; m: Message; t: number }
@@ -36,7 +36,7 @@ export function ChatScreen() {
   const fileRef = useRef<HTMLInputElement>(null)
   const meId = s.session?.memberId
   const member = (id: string) => s.members.find(m => m.id === id)
-  const colorOf = (id: string) => (id === meId ? ME : (member(id)?.color ?? 'var(--color-neutral-500)'))
+  const colorOf = (id: string) => member(id)?.color ?? 'var(--color-neutral-500)'
   const nameOf = (id: string) => (id === meId ? 'You' : (member(id)?.name ?? '?'))
   const friends = s.members.filter(m => m.id !== meId)
   const active = friends.filter(m => !m.ghost).filter(m => {
@@ -55,7 +55,9 @@ export function ChatScreen() {
       <div style={{ padding: 'var(--hdr-top) 20px 10px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 1px 0 var(--color-neutral-900)' }}>
         <div style={{ display: 'flex' }}>
           {friends.slice(0, 4).map((m, i) => (
-            <span key={m.id} style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--color-surface)', boxShadow: `0 0 0 2px var(--color-bg), inset 0 0 0 1.5px ${m.color}`, marginLeft: i ? -8 : 0 }} />
+            <span key={m.id} style={{ marginLeft: i ? -9 : 0, borderRadius: '50%', boxShadow: '0 0 0 2px #000' }}>
+              <Avatar name={m.name} color={m.color} acc={m.acc} size={28} />
+            </span>
           ))}
         </div>
         <div style={{ flex: 1 }}>

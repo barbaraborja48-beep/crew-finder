@@ -4,7 +4,8 @@ import '@fontsource/inter/latin-400.css'
 import '@fontsource/inter/latin-500.css'
 import '@phosphor-icons/web/regular/style.css'
 import './styles.css'
-import { Character, ACTIVITY_LABEL, type Activity } from './components/Character'
+import { Penguin as Character } from './components/Penguin'
+import { ACTIVITY_LABEL, ACCESSORIES, SIGNAL_LABEL, type Activity } from './lib/penguin'
 
 const view = { s: 0.315, ox: 0, oy: -74 }
 const at = (x: number, y: number) => ({ x: x * view.s + view.ox, y: y * view.s + view.oy })
@@ -78,6 +79,34 @@ function Preview() {
     <div style={{ width: 390, margin: '0 auto', padding: '24px 0 60px', color: 'var(--color-text)' }}>
       <div className="kicker">Preview · not in the app yet</div>
       <div className="title">Crew characters</div>
+
+      <section id="acc">
+        <H sub="One per penguin, so same-colored friends still look different">Accessories</H>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+          {ACCESSORIES.map((a, i) => (
+            <div key={a} style={{ borderRadius: 14, background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', padding: '10px 2px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <Character color="#ff3bd4" activity="chill" seed={a} size={44} acc={i} animate={false} />
+              <div style={{ fontSize: 9.5, color: 'var(--color-neutral-400)', textAlign: 'center' }}>{a}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="signal">
+        <H sub="Same dance, different signal. Leaf = data saver. See-through = idle, last known spot">Speed shows signal</H>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+          {[3, 2, 1, 0].map(l => (
+            <div key={l} style={{ borderRadius: 14, background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', padding: '10px 2px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <Character color="#3bf0ff" activity="dance" seed={'s' + l} size={44} signal={l} acc={l === 3 ? 6 : l === 2 ? 1 : l === 1 ? 8 : 4} saver={l === 2} />
+              <div style={{ fontSize: 9.5, color: 'var(--color-neutral-400)', textAlign: 'center' }}>{SIGNAL_LABEL[l]}{l === 2 ? ' + saver' : ''}</div>
+            </div>
+          ))}
+          <div style={{ borderRadius: 14, background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', padding: '10px 2px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <Character color="#3bf0ff" activity="sleep" seed="idle" size={44} acc={7} />
+            <div style={{ fontSize: 9.5, color: 'var(--color-neutral-400)', textAlign: 'center' }}>Idle</div>
+          </div>
+        </div>
+      </section>
 
       <section id="gallery">
         <H sub="What each friend's character does, from where they checked in and their status">What they do</H>

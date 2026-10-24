@@ -3,7 +3,7 @@ import { store, useStore } from '../lib/store'
 import { glow, where } from '../lib/venue'
 import { rowOpacity } from '../lib/rules'
 import { useNow, crewRows, statusOf, ageLabel, isStandalone, isIOS } from '../lib/view'
-import { Toggle } from '../components/common'
+import { Avatar, Toggle } from '../components/common'
 
 export function CrewScreen() {
   const s = useStore()
@@ -43,7 +43,9 @@ export function CrewScreen() {
             onClick={() => !r.member.ghost && store.ui({ findId: r.member.id, screen: 'find' })}
             style={{ border: 0, cursor: 'pointer', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', opacity: r.member.ghost ? 0.5 : rowOpacity(r.ageS) }}
           >
-            <span style={{ width: 12, height: 12, borderRadius: '50%', flex: 'none', background: r.member.ghost ? 'transparent' : r.member.color, boxShadow: r.member.ghost ? 'inset 0 0 0 1.5px var(--color-neutral-600)' : r.live ? `0 0 8px ${r.member.color}` : 'none' }} />
+            <span style={{ opacity: r.member.ghost ? 0.4 : 1 }}>
+              <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={38} />
+            </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 15, fontWeight: 500 }}>{r.member.name}</span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--color-neutral-500)' }}>{r.where}</span>
@@ -168,7 +170,7 @@ export function FindScreen() {
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', width: 'min(362px, calc(100% - 28px))' }}>
         <div style={{ marginTop: 22, height: 300, borderRadius: 'var(--radius-lg)', position: 'relative', overflow: 'hidden', boxShadow: 'var(--shadow-sm)', background: `url(${v.map_url}) ${v.view_ox - 14}px ${v.view_oy}px / ${v.map_w * v.view_scale}px auto no-repeat` }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(22,24,38,.5)' }} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)' }} />
           {p && (
             <>
               <div style={{ position: 'absolute', left: p.x, top: p.y, width: 14, height: 14, transform: 'translate(-50%,-50%)', borderRadius: '50%', background: c, opacity: r.live ? 1 : 0.45, boxShadow: glow(c, 0.5) }} />

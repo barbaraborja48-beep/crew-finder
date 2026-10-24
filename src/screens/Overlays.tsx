@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { alive, remaining } from '../lib/rules'
-import { fmt, glow, LASERS, STATUS, where } from '../lib/venue'
+import { fmt, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
 import { smsHref, sosSms } from '../lib/sms'
 import { Avatar, Toggle } from '../components/common'
+import { PenguinPicker } from '../components/PenguinPicker'
 import { disablePush, enablePush, loadPrefs, pushState, updatePrefs, type PushPrefs, type PushState } from '../lib/push'
 
 /** Your profile: name, color, status, note, ghost, notifications, SOS. */
@@ -28,7 +29,6 @@ export function ProfileSheet() {
   if (!s.ui.sheet || !me) return null
 
   const others = s.members.filter(m => m.id !== me.id)
-  const taken = new Set(others.map(m => m.color.toLowerCase()))
   const trimmed = name.trim()
   const nameClash = others.some(m => m.name.toLowerCase() === trimmed.toLowerCase())
 
@@ -61,12 +61,12 @@ export function ProfileSheet() {
   const label = { fontSize: 11, color: 'var(--color-neutral-500)' } as const
   return (
     <>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(10,11,20,.6)' }} />
+      <div onClick={close} style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(0,0,0,.66)' }} />
       <div className="scroll no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '90%', zIndex: 11, background: 'var(--color-surface)', borderRadius: '26px 26px 0 0', boxShadow: 'var(--shadow-lg)', padding: '10px 20px calc(var(--safe-bottom) + 24px)', display: 'flex', flexDirection: 'column', gap: 16, animation: 'sheet .22s ease-out' }}>
         <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-neutral-700)', margin: '0 auto', flex: 'none' }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Avatar name={trimmed || me.name} color={me.color} size={48} />
+          <Avatar name={trimmed || me.name} color={me.color} acc={me.acc} size={52} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <input
               aria-label="Your name"
@@ -81,26 +81,7 @@ export function ProfileSheet() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={label}>Your color · friends see you like this, you always see yourself in cyan</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            {LASERS.map(c => {
-              const t = taken.has(c) && c !== me.color.toLowerCase()
-              const on = c === me.color.toLowerCase()
-              return (
-                <button
-                  key={c}
-                  aria-label={`Color ${c}${t ? ' (taken)' : ''}`}
-                  disabled={t}
-                  onClick={() => store.updateMe({ color: c })}
-                  style={{ width: 32, height: 32, borderRadius: '50%', border: 0, cursor: t ? 'not-allowed' : 'pointer', background: 'transparent', boxShadow: on ? `0 0 0 2px ${c}` : 'var(--shadow-sm)', display: 'grid', placeItems: 'center', opacity: t ? 0.2 : 1 }}
-                >
-                  <span style={{ width: 14, height: 14, borderRadius: '50%', background: c, boxShadow: on ? glow(c, 0.5) : 'none' }} />
-                </button>
-              )
-            })}
-          </div>
-        </div>
+        <PenguinPicker color={me.color} acc={me.acc ?? 0} onColor={c => store.updateMe({ color: c })} onAcc={a => store.updateMe({ acc: a })} crewColors={others.map(m => m.color)} />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           {STATUS.map(([icon, l], i) => {
@@ -242,7 +223,7 @@ export function SosScreen() {
   const pct = (p * 100).toFixed(1)
 
   return (
-    <div className="screen" style={{ zIndex: 15, background: 'radial-gradient(90% 50% at 50% 42%, #3a1220, var(--color-bg))', alignItems: 'center', padding: '0 20px' }}>
+    <div className="screen" style={{ zIndex: 15, background: 'radial-gradient(70% 45% at 50% 40%, #5a0f26, #000 75%)', alignItems: 'center', padding: '0 20px' }}>
       <div
         onPointerDown={down}
         onPointerUp={up}

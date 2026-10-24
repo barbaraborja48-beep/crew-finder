@@ -1,16 +1,23 @@
 import { useState } from 'react'
 import { store, useStore } from '../lib/store'
-import { LASERS, glow } from '../lib/venue'
+import { LASERS } from '../lib/venue'
 import { isIOS, isStandalone } from '../lib/view'
+import { Penguin } from '../components/Penguin'
+import { PenguinPicker } from '../components/PenguinPicker'
 
-function Shell({ children }: { children: React.ReactNode }) {
+const CROWD: [string, number][] = [['#ff3bd4', 7], ['#3bf0ff', 1], ['#b6ff3b', 4], ['#a46bff', 6], ['#ffc83b', 2]]
+
+function Shell({ children, crowd = true }: { children: React.ReactNode; crowd?: boolean }) {
   return (
-    <div className="screen scroll no-scrollbar" style={{ padding: 'calc(var(--safe-top) + 48px) 24px calc(var(--safe-bottom) + 24px)', gap: 22, background: 'radial-gradient(80% 45% at 25% 10%, var(--color-accent-900), var(--color-bg) 70%)' }}>
-      <div style={{ display: 'flex', gap: 6 }}>
-        {['#3bf0ff', '#ff3bd4', '#b6ff3b', '#ffc83b'].map(c => (
-          <span key={c} style={{ width: 12, height: 12, borderRadius: '50%', background: c, boxShadow: glow(c, 0.4) }} />
-        ))}
-      </div>
+    <div className="screen scroll no-scrollbar" style={{ padding: 'calc(var(--safe-top) + 36px) 24px calc(var(--safe-bottom) + 24px)', gap: 22 }}>
+      {crowd && (
+        // a little crowd dancing on the welcome screens
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 64 }}>
+          {CROWD.map(([c, a], i) => (
+            <Penguin key={c} color={c} acc={a} activity="dance" seed={c} size={i === 1 ? 46 : 38} signal={3} />
+          ))}
+        </div>
+      )}
       {children}
     </div>
   )
@@ -37,16 +44,19 @@ export function Welcome() {
   return (
     <Shell>
       <div>
-        <div className="kicker">Crew Finder</div>
-        <div className="title" style={{ fontSize: 30 }}>Find your people,<br />even with one bar.</div>
+        <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 10 }}>PinGü</div>
+        <div className="title" style={{ fontSize: 38 }}>
+          Find your people,<br />
+          <span className="dim">even with one bar.</span>
+        </div>
       </div>
       <div style={{ fontSize: 14, color: 'var(--color-neutral-400)', lineHeight: 1.5 }}>
-        Tap where you are on the map. Your dot glows for 2:30 and your crew sees it. No signal? It waits and sends when it can.
+        Tap where you are and your penguin shows up on your crew’s map, glowing for 2:30. No signal? It waits and sends when it can.
       </div>
 
-      <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', background: 'var(--color-surface)', alignSelf: 'flex-start' }}>
+      <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 999, boxShadow: 'var(--shadow-sm)', background: 'var(--color-glass)', alignSelf: 'flex-start' }}>
         {([['start', 'Start a crew'], ['code', 'I have a code']] as const).map(([k, l]) => (
-          <button key={k} onClick={() => setMode(k)} style={{ border: 0, cursor: 'pointer', font: '500 12px var(--font-body)', padding: '6px 14px', borderRadius: 6, background: mode === k ? 'var(--color-accent-800)' : 'transparent', color: mode === k ? 'var(--color-accent-100)' : 'var(--color-neutral-400)' }}>
+          <button key={k} onClick={() => setMode(k)} style={{ border: 0, cursor: 'pointer', font: '500 12px var(--font-body)', padding: '7px 14px', borderRadius: 999, background: mode === k ? 'rgba(255,255,255,.12)' : 'transparent', color: mode === k ? '#fff' : 'var(--color-neutral-400)' }}>
             {l}
           </button>
         ))}
@@ -75,9 +85,12 @@ export function Welcome() {
 export function Join() {
   const s = useStore()
   const [name, setName] = useState('')
-  const taken = new Set((s.preview?.taken_colors ?? []).map(c => c.toLowerCase()))
+  const crewColors = s.preview?.taken_colors ?? []
+  const taken = new Set(crewColors.map(c => c.toLowerCase()))
   const [color, setColor] = useState<string | null>(null)
-  const pick = color && !taken.has(color) ? color : (LASERS.find(c => !taken.has(c)) ?? LASERS[0])
+  const [acc, setAcc] = useState(0)
+  // Suggest a color nobody has yet, but any color is allowed.
+  const pick = color ?? LASERS.find(c => !taken.has(c)) ?? LASERS[0]
   const link = `${location.origin}/?crew=${s.invite}`
 
   return (
@@ -96,7 +109,7 @@ export function Join() {
         <>
           <div>
             <div className="kicker">{s.preview.venue_name} · {s.preview.event_name}</div>
-            <div className="title" style={{ fontSize: 28 }}>{s.preview.crew_name}</div>
+            <div className="title" style={{ fontSize: 32 }}>{s.preview.crew_name}</div>
             <div style={{ fontSize: 12, color: 'var(--color-neutral-500)', marginTop: 4 }}>
               {s.preview.members ? `${s.preview.members} in the crew` : 'You’re the first one here'} · code {s.invite}
             </div>
@@ -108,33 +121,18 @@ export function Join() {
             </div>
           )}
 
-          <form onSubmit={e => { e.preventDefault(); if (name.trim()) store.joinCrew(name.trim(), pick) }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <form onSubmit={e => { e.preventDefault(); if (name.trim()) store.joinCrew(name.trim(), pick, acc) }} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label className="kicker" htmlFor="nm">Your name</label>
               <input id="nm" className="input" value={name} maxLength={20} onChange={e => setName(e.target.value)} placeholder="What your crew calls you" autoComplete="given-name" />
               <div style={{ fontSize: 11, color: 'var(--color-neutral-600)' }}>Already joined on another phone or browser? Use the same name.</div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div className="kicker">Your laser color</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                {LASERS.map(c => {
-                  const t = taken.has(c)
-                  const on = pick === c
-                  return (
-                    <button
-                      type="button"
-                      key={c}
-                      aria-label={`Color ${c}${t ? ' (taken)' : ''}`}
-                      disabled={t}
-                      onClick={() => setColor(c)}
-                      style={{ width: 36, height: 36, borderRadius: '50%', border: 0, cursor: t ? 'not-allowed' : 'pointer', background: 'transparent', boxShadow: on ? `0 0 0 2px ${c}` : 'var(--shadow-sm)', display: 'grid', placeItems: 'center', opacity: t ? 0.25 : 1 }}
-                    >
-                      <span style={{ width: 16, height: 16, borderRadius: '50%', background: c, boxShadow: on ? glow(c, 0.5) : 'none' }} />
-                    </button>
-                  )
-                })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="kicker">Your laser color and penguin</div>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
+                <Penguin color={pick} acc={acc} activity="dance" seed="me" size={64} signal={3} />
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-neutral-600)' }}>On your own phone you always show as cyan.</div>
+              <PenguinPicker color={pick} acc={acc} onColor={setColor} onAcc={setAcc} crewColors={crewColors} />
             </div>
             <button className="btn btn-primary" style={{ height: 46 }} disabled={!name.trim() || s.busy}>
               {s.busy ? 'Joining…' : 'Join crew'}
