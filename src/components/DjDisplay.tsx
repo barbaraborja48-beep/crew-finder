@@ -1,6 +1,7 @@
 // The DJ screen on the dance floor: who's playing right now, on a slow lava-lamp aura.
 // Runs off the phone's clock (corrected by the server's), so it needs no data at all.
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { store } from '../lib/store'
 
 export interface DjSet {
@@ -109,7 +110,8 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
     setPremium(f)
   }
   const tag = sorted[0] ? dayTag(sorted[0].start) : null
-  return (
+  // Rendered on top of the whole app (over the tab bar), not inside the scrolling page.
+  return createPortal(
     <div className="dj-sheet-bg" onClick={onClose}>
       <div className="dj-sheet" onClick={e => e.stopPropagation()}>
         <Aura calm />
@@ -188,7 +190,8 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
         </>
         )}
       </div>
-    </div>
+    </div>,
+    document.querySelector('.app') ?? document.body,
   )
 }
 
