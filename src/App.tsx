@@ -14,6 +14,12 @@ export default function App() {
   useEffect(() => {
     store.boot()
   }, [])
+  // Fetch every floor plan of your venue once (kept by the service worker), so
+  // switching floors works later with no signal.
+  const plans = (s.venue?.floors ?? []).map(f => f.map_url).join(' ')
+  useEffect(() => {
+    if (plans) plans.split(' ').forEach(u => (new Image().src = u))
+  }, [plans])
 
   const screen = s.ui.screen
   const me = s.members.find(m => m.id === s.session?.memberId)

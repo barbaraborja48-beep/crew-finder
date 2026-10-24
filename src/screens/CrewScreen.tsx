@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { store, useStore } from '../lib/store'
-import { glow, where } from '../lib/venue'
+import { floorView, glow, where } from '../lib/venue'
 import { rowOpacity } from '../lib/rules'
 import { useNow, crewRows, statusOf, ageLabel, isStandalone, isIOS } from '../lib/view'
 import { Avatar, Toggle } from '../components/common'
@@ -97,7 +97,7 @@ export function CrewScreen() {
                 </option>
               ))}
             </select>
-            <input className="input" maxLength={40} defaultValue={s.crew.meet_spot_note} placeholder="When? e.g. on the hour" onBlur={e => store.setMeetSpot(s.crew!.meet_spot_place_id ?? 'picnic', e.target.value)} />
+            <input className="input" maxLength={40} defaultValue={s.crew.meet_spot_note} placeholder="When? e.g. on the hour" onBlur={e => store.setMeetSpot(s.crew!.meet_spot_place_id ?? s.venue?.default_meet ?? s.places[0]?.id ?? '', e.target.value)} />
           </div>
         )}
       </div>
@@ -142,9 +142,9 @@ export function FindScreen() {
   const s = useStore()
   const now = useNow()
   const r = crewRows(s, now).find(x => x.member.id === s.ui.findId)
-  const v = s.venue
-  if (!r || !v) return null
+  if (!r || !s.venue) return null
   const pl = r.dot ? store.place(r.dot.place_id) : undefined
+  const v = floorView(s.venue, pl?.floor ?? s.ui.floor) // their floor's plan
   const isArea = pl && pl.type !== 'stage'
   // Same map framing as the overview, shifted 14 px for the narrower 362 px card.
   const p = pl && r.dot ? { x: pl.x * v.view_scale + v.view_ox - 14 + (r.dot.nx - 0.5) * (isArea ? 15 : 30), y: pl.y * v.view_scale + v.view_oy + (r.dot.ny - 0.5) * (isArea ? 12 : 24) } : null

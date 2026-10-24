@@ -57,6 +57,7 @@ interface Place {
   name: string
   near: string
   shape: { kind: string } | null
+  floor?: number | null
 }
 
 const zone = (nx: number, ny: number) =>
@@ -75,10 +76,11 @@ function spot(p: Place, nx: number, ny: number) {
 
 function where(p: Place | undefined, nx = 0.5, ny = 0.5) {
   if (!p) return 'somewhere'
-  if (p.type === 'stage') return `${p.name} · ${zone(nx, ny)}`
+  const fl = p.floor ? ` · Planta ${p.floor}` : ''
+  if (p.type === 'stage') return `${p.name} · ${zone(nx, ny)}${fl}`
   const base = p.near ? `${p.name} · by ${p.near}` : p.name
   const s = spot(p, nx, ny)
-  return s ? `${base} · ${s}` : base
+  return `${s ? `${base} · ${s}` : base}${fl}`
 }
 
 const agoText = (iso: string) => {
@@ -113,7 +115,7 @@ async function build(table: string, r: Record<string, unknown>): Promise<Note | 
   const { data: sender } = await db.from('members').select('id,name,crew_id,ghost').eq('id', memberId).single()
   if (!sender) return null
   const { data: crew } = await db.from('crews').select('venue_id').eq('id', sender.crew_id).single()
-  const { data: places } = await db.from('places').select('id,type,name,near,shape').eq('venue_id', crew?.venue_id)
+  const { data: places } = await db.from('places').select('id,type,name,near,shape,floor').eq('venue_id', crew?.venue_id)
   const place = (id: unknown) => (places as Place[] | null)?.find(p => p.id === id)
   const name = sender.name as string
 

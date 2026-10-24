@@ -230,6 +230,11 @@ a { color: var(--color-accent-300); }
 .chr.anim.dance.m5 .ar { animation: chr-robo-r calc(1.88s * var(--k, 1)) steps(1) var(--d) infinite; }
 .chr.anim.dance.m5 .face { animation: chr-robo-head calc(.94s * var(--k, 1)) steps(1) var(--d) infinite; }
 
+.chr.anim.smoke .ar { animation: chr-drag calc(4s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.smoke .b { animation: chr-sway calc(3.2s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.smoke .puff { opacity: 0; animation: chr-puff calc(3s * var(--k, 1)) ease-out var(--d) infinite; }
+.chr.anim.smoke .puff.p2 { animation-delay: calc(var(--d) - 1s * var(--k, 1)); }
+.chr.anim.smoke .puff.p3 { animation-delay: calc(var(--d) - 2s * var(--k, 1)); }
 .chr.anim.drink .ar { animation: chr-sip calc(3.2s * var(--k, 1)) ease-in-out var(--d) infinite; }
 .chr.anim.drink .b { animation: chr-sway calc(2.4s * var(--k, 1)) ease-in-out var(--d) infinite; }
 .chr.anim.eat .ar { animation: chr-bite calc(1.1s * var(--k, 1)) ease-in-out var(--d) infinite; }
@@ -284,6 +289,8 @@ a { color: var(--color-accent-300); }
 @keyframes chr-robo-l { 0% { transform: rotate(90deg) } 25% { transform: rotate(0) } 50% { transform: rotate(160deg) } 75% { transform: rotate(90deg) } }
 @keyframes chr-robo-r { 0% { transform: rotate(0) } 25% { transform: rotate(-90deg) } 50% { transform: rotate(-90deg) } 75% { transform: rotate(-160deg) } }
 @keyframes chr-robo-head { 0% { transform: translateX(-1.5px) } 50% { transform: translateX(1.5px) } }
+@keyframes chr-drag { 0%, 50%, 100% { transform: rotate(0) } 62%, 78% { transform: rotate(-105deg) } }
+@keyframes chr-puff { 0% { transform: translate(0, 0) scale(.5); opacity: 0 } 25% { opacity: .55 } 100% { transform: translate(5px, -16px) scale(1.6); opacity: 0 } }
 @keyframes chr-sip { 0%, 55%, 100% { transform: rotate(0) } 70%, 85% { transform: rotate(-115deg) } }
 @keyframes chr-bite { 0%, 100% { transform: rotate(0) } 50% { transform: rotate(-100deg) } }
 @keyframes chr-chew { from { transform: translateY(0) } to { transform: translateY(1px) } }

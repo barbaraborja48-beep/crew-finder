@@ -98,9 +98,10 @@ export interface State {
     screen: Screen
     stage: string
     heat: 'crew' | 'crowd'
-    types: Record<PlaceType, boolean>
+    types: Partial<Record<PlaceType, boolean>> // unset = the venue's default (see MapScreen)
     areaSel: string | null
     findId: string | null
+    floor: number // multi-floor venues: which floor the map shows
     sheet: boolean
     sos: boolean
   }
@@ -133,9 +134,10 @@ const initial: State = {
     screen: 'map',
     stage: 'brunch',
     heat: 'crew',
-    types: { stage: true, wc: true, bar: true, water: true, medic: true, food: true, picnic: true, open: false },
+    types: {},
     areaSel: null,
     findId: null,
+    floor: 1,
     sheet: false,
     sos: false,
   },
@@ -325,11 +327,11 @@ class Store {
     }
   }
 
-  async createCrew(name: string) {
+  async createCrew(name: string, venueId?: string) {
     this.set({ busy: true, error: null })
     try {
       await ensureAuth()
-      const { data, error } = await supabase.rpc('create_crew', { p_name: name })
+      const { data, error } = await supabase.rpc('create_crew', { p_name: name, ...(venueId ? { p_venue: venueId } : {}) })
       if (error) throw error
       await this.openInvite(data as string)
     } catch (e) {
@@ -896,8 +898,9 @@ class Store {
   openPlace(id: string | null) {
     const p = this.place(id)
     if (!p) return
-    if (hasCloseUp(p)) this.ui({ screen: 'stage', stage: p.id, areaSel: null })
-    else this.ui({ screen: 'map', areaSel: p.id, types: { ...this.state.ui.types, [p.type]: true } })
+    const floor = p.floor ? { floor: p.floor } : {}
+    if (hasCloseUp(p)) this.ui({ screen: 'stage', stage: p.id, areaSel: null, ...floor })
+    else this.ui({ screen: 'map', areaSel: p.id, types: { ...this.state.ui.types, [p.type]: true }, ...floor })
   }
 }
 

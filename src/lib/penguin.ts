@@ -1,7 +1,7 @@
 // PinGü penguin helpers: what someone's penguin is doing, accessories, signal speeds.
 import type { PlaceType } from './venue'
 
-export type Activity = 'dance' | 'drink' | 'eat' | 'wait' | 'sit' | 'chill' | 'lost' | 'walk' | 'sleep'
+export type Activity = 'dance' | 'drink' | 'eat' | 'wait' | 'sit' | 'chill' | 'smoke' | 'lost' | 'walk' | 'sleep'
 
 /** What someone is up to, from where they checked in and their status. */
 export function activityFor(type: PlaceType | undefined, status: number, live: boolean): Activity {
@@ -18,7 +18,10 @@ export function activityFor(type: PlaceType | undefined, status: number, live: b
     case 'food':
       return 'eat'
     case 'wc':
+    case 'coat':
       return 'wait'
+    case 'outside':
+      return 'smoke'
     case 'picnic':
     case 'medic':
       return 'sit'
@@ -34,6 +37,7 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
   wait: 'in the queue',
   sit: 'sitting down',
   chill: 'hanging out',
+  smoke: 'outside for a smoke',
   lost: 'looking for you',
   walk: 'heading out',
   sleep: 'last seen here',

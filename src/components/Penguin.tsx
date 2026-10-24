@@ -143,6 +143,12 @@ export function Penguin({
               <line x1="37" y1="37" x2="39.5" y2="33" stroke="#f3f5fe" strokeWidth="1" />
             </g>
           )}
+          {activity === 'smoke' && (
+            <g>
+              <rect x="33" y="40.4" width="8" height="1.8" rx=".9" fill="#f3f5fe" />
+              <rect x="40" y="40.4" width="1.6" height="1.8" rx=".8" fill="#ff8a3b" style={{ filter: 'drop-shadow(0 0 1.5px #ff8a3b)' }} />
+            </g>
+          )}
           {activity === 'eat' && <path d="M31 40 a5 5 0 0 1 10 0 z" fill="#ffc83b" stroke="#ff8a3b" strokeWidth="1" />}
         </g>
         <ellipse cx="20" cy="29" rx="13.5" ry="16.5" fill={queued ? 'transparent' : color} stroke={queued ? color : 'none'} strokeWidth={queued ? 2 : 0} strokeDasharray={queued ? '3 2' : undefined} />
@@ -170,6 +176,13 @@ export function Penguin({
         <g fill={color} fontFamily="Inter, sans-serif" fontWeight="700" style={{ filter: `drop-shadow(0 0 2px ${color})` }}>
           <text className="note" x="30" y="2" fontSize="12">♪</text>
           <text className="note n2" x="0" y="0" fontSize="11">♫</text>
+        </g>
+      )}
+      {activity === 'smoke' && animate && (
+        <g fill="#c9c9d1">
+          <circle className="puff" cx="34" cy="20" r="2.4" />
+          <circle className="puff p2" cx="35" cy="20" r="2" />
+          <circle className="puff p3" cx="33" cy="20" r="1.8" />
         </g>
       )}
       {activity === 'lost' && (

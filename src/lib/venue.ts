@@ -1,4 +1,4 @@
-export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'picnic' | 'open'
+export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'picnic' | 'open' | 'coat' | 'outside'
 
 /** Real outline on the map image (pixels). Places with a shape get a close-up view. */
 export type LineShape = { kind: 'counter' | 'trucks'; cx: number; cy: number; len: number; angle: number; depth: number }
@@ -15,6 +15,19 @@ export interface Place {
   x: number // map image pixels (icon position)
   y: number
   shape?: Shape | null
+  floor?: number | null // multi-floor venues; empty = on every floor
+}
+
+/** One floor plan of a multi-floor venue. */
+export interface Floor {
+  n: number
+  name: string
+  map_url: string
+  map_w: number
+  map_h: number
+  view_scale: number
+  view_ox: number
+  view_oy: number
 }
 
 export interface Venue {
@@ -27,7 +40,24 @@ export interface Venue {
   view_scale: number
   view_ox: number
   view_oy: number
+  floors?: Floor[]
+  default_meet?: string | null
 }
+
+/** Venues you can start a crew at. The maps live in /public/assets. */
+export const VENUES = [
+  { id: 'e1e0a000-0000-4000-8000-000000000001', name: 'Halloween Takeover', where: 'Recinto Iberdrola Music · 31.10.26' },
+  { id: 'e1e0a000-0000-4000-8000-000000000002', name: 'Mondo Disko', where: 'Sala But · two floors' },
+]
+
+/** The venue as seen on one floor: same venue, that floor's map. */
+export function floorView(v: Venue, n: number | null | undefined): Venue {
+  const f = v.floors?.find(x => x.n === n) ?? v.floors?.[0]
+  return f ? { ...v, ...f, name: v.name } : v
+}
+
+/** Is this place drawn on floor n? (Single-floor venues: always.) */
+export const onFloor = (p: Place | undefined, n: number) => !!p && (p.floor == null || p.floor === n)
 
 export const TYPES: Record<PlaceType, [label: string, icon: string]> = {
   stage: ['Stages', 'ph ph-speaker-hifi'],
@@ -38,6 +68,8 @@ export const TYPES: Record<PlaceType, [label: string, icon: string]> = {
   food: ['Food trucks', 'ph ph-fork-knife'],
   picnic: ['Picnic', 'ph ph-picnic-table'],
   open: ['Open areas', 'ph ph-tree'],
+  coat: ['Coat check', 'ph ph-coat-hanger'],
+  outside: ['Outside', 'ph ph-cigarette'],
 }
 
 export const STATUS: [icon: string, label: string][] = [
@@ -79,10 +111,11 @@ export function spot(p: Place, nx: number, ny: number) {
 /** "Brunch! · front L", "Bar · by elrow, left · left end", "WC · by Salida" */
 export function where(p: Place | undefined, nx = 0.5, ny = 0.5) {
   if (!p) return 'Somewhere'
-  if (p.type === 'stage') return `${p.name} · ${zone(nx, ny)}`
+  const fl = p.floor ? ` · Planta ${p.floor}` : ''
+  if (p.type === 'stage') return `${p.name} · ${zone(nx, ny)}${fl}`
   const base = p.near ? `${p.name} · by ${p.near}` : p.name
   const s = p.shape ? spot(p, nx, ny) : ''
-  return s ? `${base} · ${s}` : base
+  return `${s ? `${base} · ${s}` : base}${fl}`
 }
 
 /** Title for a close-up: "Brunch!", "Bar · elrow, left", "Food trucks". */
