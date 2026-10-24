@@ -76,11 +76,11 @@ export function ShortcutScreen() {
         </button>
         <div>
           <div className="kicker">iPhone Shortcut</div>
-          <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em' }}>One-tap “I’m here”</div>
+          <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em' }}>One-touch “I’m here”</div>
         </div>
       </div>
       <div style={{ fontSize: 13, color: 'var(--color-neutral-400)', lineHeight: 1.5 }}>
-        Re-lights your dot without opening the app: from a Home Screen widget, the lock screen, the Action button or Back Tap. If your dot is still glowing it adds 1:00, otherwise it lights you up again at your last spot. It needs signal, there’s no queue.
+        Pins you again without opening the app: from a Home Screen widget, the lock screen, the Action button or Back Tap. It re-pins you at your last spot so friends see you’re still there. It needs signal, there’s no queue.
       </div>
 
       <Step n={1}>Open the <b>Shortcuts</b> app, tap <b>+</b>, name it “I’m here”.</Step>
@@ -96,7 +96,7 @@ export function ShortcutScreen() {
       <Copy label="member_id" value={memberId} />
       <Copy label="secret (keep private)" value={secret ?? 'Loading… needs signal once'} />
       <Step n={5}>
-        Add <b>Get Dictionary Value</b> → key <code>message</code>, then <b>Show Notification</b> with that value. You’ll see something like “Checked in · Brunch! · front L · 2:30”.
+        Add <b>Get Dictionary Value</b> → key <code>message</code>, then <b>Show Notification</b> with that value. You’ll see something like “Pinned · Brunch! · front L”.
       </Step>
       <Step n={6}>
         Optional: duplicate it and add a third Text field <code>p_type</code> = <code>wc</code>, <code>bar</code> or <code>water</code> for “I’m at the nearest WC/Bar/Water”.

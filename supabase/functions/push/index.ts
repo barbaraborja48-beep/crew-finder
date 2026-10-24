@@ -123,7 +123,7 @@ async function build(table: string, r: Record<string, unknown>): Promise<Note | 
     if (Date.now() - new Date(r.born as string).getTime() > 30 * 60_000) return null
     return {
       title: name,
-      body: `Checked in · ${where(place(r.place_id), r.nx as number, r.ny as number)}${agoText(r.born as string)}`,
+      body: `Pinned · ${where(place(r.place_id), r.nx as number, r.ny as number)}${agoText(r.born as string)}`,
       tag: `spot-${memberId}`,
       open: 'find',
       member: memberId,

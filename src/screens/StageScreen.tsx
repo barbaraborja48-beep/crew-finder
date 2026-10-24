@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
-import { alive, dotOpacity, fraction, nearFriend, remaining } from '../lib/rules'
-import { fmt, hasCloseUp, isLine, placeTitle, TYPES, where, type Place, type PlaceType } from '../lib/venue'
+import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
+import { agoLong, hasCloseUp, isLine, placeTitle, TYPES, where, type Place, type PlaceType } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf } from '../lib/view'
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
 import { Penguin } from '../components/Penguin'
@@ -98,7 +98,7 @@ export function StageScreen() {
   const place = closeUps.find(p => p.id === s.ui.stage) ?? closeUps.find(p => p.type === 'stage')
   const rows = crewRows(s, now)
   const mine = store.myDot()
-  const meLive = alive(mine, now)
+  const meLive = pinned(mine, now)
   const me = store.me()
   const sync = mySync(s, now)
 
@@ -107,7 +107,7 @@ export function StageScreen() {
   const maxLen = Math.max(1, ...s.places.map(p => (p.shape && isLine(p.shape) && p.shape.kind === 'counter' ? p.shape.len : 0)))
   const siblings = closeUps.filter(p => p.type === place.type)
   const groups = GROUPS.filter(g => closeUps.some(p => p.type === g))
-  const liveAt = (id: string) => rows.filter(r => r.live && r.dot!.place_id === id).length + (meLive && mine!.place_id === id ? 1 : 0)
+  const liveAt = (id: string) => rows.filter(r => r.fresh && r.dot!.place_id === id).length + (fresh(mine, now) && mine!.place_id === id ? 1 : 0)
 
   const onTap = (e: React.MouseEvent) => {
     const r = floorRef.current!.getBoundingClientRect()
@@ -121,9 +121,8 @@ export function StageScreen() {
   const here = rows.filter(r => r.live && r.dot!.place_id === place.id)
   const meHere = meLive && mine!.place_id === place.id
   const sent = !!mine && !s.pending[mine.id] && !me?.ghost
-  const near = meLive ? nearFriend(store.friendDots(), mine!.place_id, mine!.nx, mine!.ny, now) : undefined
-  const myLine = meLive ? where(store.place(mine!.place_id), mine!.nx, mine!.ny) : 'Not checked in'
-  const mySub = meLive ? `${fmt(remaining(mine!, now))} left${near ? ` · ${near.name} near, fading slower` : ''}` : 'Tap where you are'
+  const myLine = meLive ? where(store.place(mine!.place_id), mine!.nx, mine!.ny) : 'Not pinned'
+  const mySub = meLive ? `Pinned ${agoLong(ageOf(mine!, now))} · pin again to update` : 'Pin where you are'
   const chipLabel = (p: Place) => (p.type === 'stage' || !p.near ? p.name : p.near)
 
   return (
@@ -211,9 +210,9 @@ export function StageScreen() {
                   }}
                   style={{ position: 'absolute', left: d.nx * W, top: d.ny * H, transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                 >
-                  <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(place.type, r.member.status, true)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
+                  <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(place.type, r.member.status, r.fresh)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
-                    {r.member.name} {fmt(r.rem)}
+                    {r.member.name}
                   </span>
                 </button>
               )
@@ -224,9 +223,9 @@ export function StageScreen() {
               const size = 32 + Math.min(4, mine!.taps - 1) * 4
               return (
                 <div style={{ position: 'absolute', left: mine!.nx * W, top: mine!.ny * H, transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(place.type, me.status, true)} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
+                  <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(place.type, me.status, fresh(mine, now))} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
-                    You {fmt(remaining(mine!, now))}
+                    You
                   </span>
                 </div>
               )

@@ -8,7 +8,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase, ensureAuth, isTransient, configured } from './supabase'
 import { kv, outbox, type OutItem, type Table } from './db'
 import { compressPhoto } from './photo'
-import { alive, nearFriend, nextCheckin, remaining, MAX_REMAINING, type Dot } from './rules'
+import { pinned, nextCheckin, type Dot } from './rules'
 import { hasCloseUp, where, ME, STATUS, type Place, type PlaceType, type Venue } from './venue'
 
 // ─── types ────────────────────────────────────────────────────────────────
@@ -144,6 +144,10 @@ const initial: State = {
 // ─── row conversion ───────────────────────────────────────────────────────
 
 const ms = (iso: string) => new Date(iso).getTime()
+// Server clock minus this phone's clock, from the last sync. Times from the server are
+// shifted by it, so a phone set a minute wrong still shows the right ages.
+let skew = 0
+const fromServer = (t: number) => t - skew
 const iso = (t: number) => new Date(t).toISOString()
 const uuid = () => crypto.randomUUID()
 
@@ -155,10 +159,10 @@ const toCheckin = (r: Row): Checkin => ({
   place_id: r.place_id as string,
   nx: r.nx as number,
   ny: r.ny as number,
-  born: ms(r.born as string),
+  born: fromServer(ms(r.born as string)),
   life_s: r.life_s as number,
   taps: r.taps as number,
-  created_at: r.created_at ? ms(r.created_at as string) : undefined,
+  created_at: r.created_at ? fromServer(ms(r.created_at as string)) : undefined,
 })
 // created_at is set by the server; don't spend bytes sending it.
 const checkinRow = (c: Checkin): Row => {
@@ -166,7 +170,7 @@ const checkinRow = (c: Checkin): Row => {
   delete row.created_at
   return row
 }
-const toMessage = (r: Row): Message => ({ ...(r as unknown as Message), born: ms(r.born as string) })
+const toMessage = (r: Row): Message => ({ ...(r as unknown as Message), born: fromServer(ms(r.born as string)) })
 const withoutLocal = (m: Message) => {
   const rest: Partial<Message> = { ...m }
   delete rest.localPhoto
@@ -177,8 +181,11 @@ const messageRow = (m: Message): Row => ({ ...withoutLocal(m), born: iso(m.born)
 const byId = <T extends { id: string }>(rows: T[]) => Object.fromEntries(rows.map(r => [r.id, r]))
 
 // Compact upload format for crew_sync (short keys, rounded positions, no empty fields).
+// a = how long ago it happened, so the server can stamp it on its own clock even if
+// it sat in the outbox for ten minutes. b is the phone's own time, for older databases.
+const ageNow = (r: Row) => Math.max(0, Date.now() - ms(r.born as string))
 const r3 = (n: unknown) => (n == null ? undefined : Math.round((n as number) * 1000) / 1000)
-const packCheckin = (r: Row): Row => ({ i: r.id, p: r.place_id, x: r3(r.nx), y: r3(r.ny), b: ms(r.born as string), l: r.life_s, t: r.taps })
+const packCheckin = (r: Row): Row => ({ i: r.id, p: r.place_id, x: r3(r.nx), y: r3(r.ny), a: ageNow(r), b: ms(r.born as string), l: r.life_s, t: r.taps })
 const packMessage = (r: Row): Row => ({
   i: r.id,
   k: r.type,
@@ -187,6 +194,7 @@ const packMessage = (r: Row): Row => ({
   p: r.place_id || undefined,
   x: r3(r.nx),
   y: r3(r.ny),
+  a: ageNow(r),
   b: ms(r.born as string),
   to: r.to_member || undefined,
 })
@@ -229,8 +237,6 @@ class Store {
   private failStreak = 0
   private saveTimer: ReturnType<typeof setTimeout> | undefined
   private toastTimer: ReturnType<typeof setTimeout> | undefined
-  private slowBonus = 0
-  private slowSynced = Date.now()
   private started = false
   private live = false // realtime socket subscribed
 
@@ -385,7 +391,6 @@ class Store {
       }
     })
     if (new URLSearchParams(location.search).get('open')) history.replaceState(null, '', '/')
-    setInterval(() => this.tick(), 1000)
     // Data saver: no live connection, check every 60 s while open (notifications trigger checks too).
     // Otherwise a live connection, plus a check every 20 s whenever it's down.
     setInterval(() => {
@@ -487,6 +492,7 @@ class Store {
       const netSent = this.netToReport
       if (netSent != null) me = { ...(me ?? {}), net: netSent } // a couple of bytes on a request we're making anyway
       const t0 = performance.now()
+      const sentAt = Date.now()
       const { data, error, status } = await supabase.rpc('crew_sync', {
         p_member: session.memberId,
         p_since: (await kv.get<string>('cursor')) ?? null,
@@ -510,6 +516,11 @@ class Store {
       }
       ok = true
       const r = data as SyncResponse
+      // the server read its clock about halfway through the round trip
+      if (r.now) {
+        const est = ms(r.now) - (sentAt + Date.now()) / 2
+        if (Math.abs(est - skew) > 2000) skew = est // ignore network jitter, catch real clock gaps
+      }
       if (r.gone) {
         // Crew deleted (48 h after the event) or you rejoined on another phone.
         this.toast('You’re no longer in this crew', 'ph ph-warning', '#ffd97a')
@@ -578,13 +589,13 @@ class Store {
     if (r.checkins.length)
       this.mergeCheckins(
         r.checkins.map(([id, member_id, place_id, nx, ny, born, life_s, taps, created_at]) => ({
-          id, member_id, place_id, nx: +nx, ny: +ny, born, life_s, taps, created_at, crew_id: crewId,
+          id, member_id, place_id, nx: +nx, ny: +ny, born: fromServer(born), life_s, taps, created_at: created_at && fromServer(created_at), crew_id: crewId,
         })),
       )
     if (r.messages.length)
       this.mergeMessages(
         r.messages.map(([id, member_id, type, text, photo_url, place_id, nx, ny, born, to_member]) => ({
-          id, member_id, type, text, photo_url, place_id, nx: nx == null ? null : +nx, ny: ny == null ? null : +ny, born, to_member, crew_id: crewId,
+          id, member_id, type, text, photo_url, place_id, nx: nx == null ? null : +nx, ny: ny == null ? null : +ny, born: fromServer(born), to_member, crew_id: crewId,
         })),
       )
   }
@@ -704,25 +715,6 @@ class Store {
     this.queueSync()
   }
 
-  /** Once a second: friend-near slowdown on your own dot. */
-  private tick() {
-    const s = this.state
-    const mine = this.myDot()
-    const now = Date.now()
-    if (!mine || !alive(mine, now) || this.ghost()) return
-    if (nearFriend(this.friendDots(), mine.place_id, mine.nx, mine.ny, now)) this.slowBonus += 0.2
-    // Fold the bonus into the row every 15 s so friends' phones see it too.
-    if (this.slowBonus >= 1 && now - this.slowSynced > 15_000) {
-      const add = Math.floor(this.slowBonus)
-      this.slowBonus -= add
-      this.slowSynced = now
-      const life_s = Math.round(Math.min(MAX_REMAINING + (now - mine.born) / 1000, mine.life_s + add))
-      const next = { ...mine, life_s }
-      this.set({ checkins: { ...s.checkins, [next.id]: next } })
-      this.enqueue('checkins', 'upsert', next.id, checkinRow(next))
-    }
-  }
-
   // ─── selectors used by actions ────────────────────────────────────────
 
   me() {
@@ -755,18 +747,16 @@ class Store {
 
   // ─── actions ──────────────────────────────────────────────────────────
 
-  /** Tap on a stage floor (nx/ny 0–1), an area card, or a quick zone. */
+  /** Pin on a stage floor (nx/ny 0–1), an area card, or a quick zone. */
   checkIn(placeId: string, nx: number, ny: number, extendAnywhere = false) {
     const s = this.state
     const me = this.me()
     if (!me || !s.session) return
     const now = Date.now()
     const mine = this.myDot()
-    const near = nearFriend(this.friendDots(), placeId, nx, ny, now)
-    const { dot, merged } = nextCheckin(mine, placeId, nx, ny, now, !!near, extendAnywhere, uuid)
+    const { dot, merged } = nextCheckin(mine, placeId, nx, ny, now, extendAnywhere, uuid)
     const row: Checkin = { ...dot, member_id: me.id, crew_id: s.session.crewId, created_at: merged ? (mine?.created_at ?? now) : now }
-    const msg = merged ? `+1:00${near ? ` · +0:30 ${near.name} near` : ''}` : `${where(this.place(placeId), nx, ny)}${near ? ` · ${near.name} near` : ''}`
-    this.slowBonus = 0
+    const msg = `${merged ? 'Still here · ' : 'Pinned · '}${where(this.place(placeId), dot.nx, dot.ny)}`
 
     if (me.ghost) {
       this.set({ ghostDot: row })
@@ -797,13 +787,13 @@ class Store {
     this.updateMe({ ghost: on })
     this.addMessage({ type: 'status', text: on ? 'went ghost' : 'is back from ghost mode' })
     if (on) {
-      if (mine && alive(mine, Date.now())) this.set({ ghostDot: mine })
+      if (mine && pinned(mine, Date.now())) this.set({ ghostDot: mine })
       this.toast('Ghost on · nothing is shared', 'ph ph-ghost', 'var(--color-neutral-400)')
     } else {
-      // Coming back: share where you are now, if your dot is still glowing.
+      // Coming back: share the spot you pinned while hidden, if there is one.
       const g = s.ghostDot
       this.set({ ghostDot: null })
-      if (g && alive(g, Date.now())) {
+      if (g && pinned(g, Date.now())) {
         this.set(st => ({ checkins: { ...st.checkins, [g.id]: g } }))
         this.enqueue('checkins', 'upsert', g.id, checkinRow(g))
       }
@@ -836,7 +826,7 @@ class Store {
 
   sendLocation() {
     const mine = this.myDot()
-    if (!mine || !alive(mine, Date.now())) return this.toast('Check in first', 'ph ph-crosshair', 'var(--color-neutral-400)')
+    if (!mine || !pinned(mine, Date.now())) return this.toast('Pin where you are first', 'ph ph-map-pin', 'var(--color-neutral-400)')
     this.addMessage({ type: 'loc', place_id: mine.place_id, nx: mine.nx, ny: mine.ny })
   }
 
@@ -844,7 +834,7 @@ class Store {
     try {
       const blob = await compressPhoto(file)
       const mine = this.myDot()
-      const live = mine && alive(mine, Date.now())
+      const live = mine && pinned(mine, Date.now())
       this.addMessage(
         { type: 'photo', localPhoto: URL.createObjectURL(blob), place_id: live ? mine.place_id : null, nx: live ? mine.nx : null, ny: live ? mine.ny : null },
         blob,
@@ -865,7 +855,7 @@ class Store {
   async sos() {
     const me = this.me()
     const mine = this.myDot()
-    const live = mine && alive(mine, Date.now())
+    const live = mine && pinned(mine, Date.now())
     const battery = (await batteryLevel()) ?? me?.battery
     const spot = live ? where(this.place(mine.place_id), mine.nx, mine.ny) : 'location unknown'
     this.addMessage({
@@ -941,7 +931,6 @@ function friendly(e: unknown) {
 }
 
 export const store = new Store()
-export const remainingOf = remaining
 
 export function useStore(): State {
   return useSyncExternalStore(store.subscribe, store.get)

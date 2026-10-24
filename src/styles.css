@@ -189,29 +189,61 @@ a { color: var(--color-accent-300); }
 .chr .face { transform-origin: 20px 22px; }
 .chr .fl { transform-origin: 14.5px 46px; }
 .chr .fr { transform-origin: 25.5px 46px; }
-.chr.anim * { animation-delay: var(--d); }
+/* the `animation` shorthand resets delays, so every rule carries var(--d): penguins move off each other's beat */
 
 /* ~128 bpm on a great signal */
-.chr.anim.dance .b { animation: chr-bounce calc(.47s * var(--k, 1)) ease-in-out infinite alternate; }
+.chr.anim.dance .b { animation: chr-bounce calc(.47s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
 .chr.anim.dance .al { animation: chr-arm-l calc(.94s * var(--k, 1)) ease-in-out infinite; animation-delay: var(--d); }
 .chr.anim.dance .ar { animation: chr-arm-r calc(.94s * var(--k, 1)) ease-in-out infinite; animation-delay: var(--d); }
-.chr.anim.dance .fl { animation: chr-foot calc(.47s * var(--k, 1)) ease-in-out infinite alternate; }
-.chr.anim.dance .fr { animation: chr-foot calc(.47s * var(--k, 1)) ease-in-out infinite alternate-reverse; }
+.chr.anim.dance .fl { animation: chr-foot calc(.47s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.dance .fr { animation: chr-foot calc(.47s * var(--k, 1)) ease-in-out var(--d) infinite alternate-reverse; }
 
-.chr.anim.drink .ar { animation: chr-sip calc(3.2s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.drink .b { animation: chr-sway calc(2.4s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.eat .ar { animation: chr-bite calc(1.1s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.eat .face { animation: chr-chew calc(.55s * var(--k, 1)) ease-in-out infinite alternate; }
-.chr.anim.wait .b { animation: chr-sway calc(1.4s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.wait .fr { animation: chr-tap calc(.35s * var(--k, 1)) ease-in-out infinite alternate; }
-.chr.anim.sit .b { transform: translateY(5px) scale(1.06, .9); animation: chr-breathe calc(3s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.chill .b { animation: chr-sway calc(2.6s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.chill .face { animation: chr-nod calc(1.3s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.lost .face { animation: chr-look calc(1.8s * var(--k, 1)) ease-in-out infinite; }
-.chr.anim.lost .bubble { animation: chr-pop calc(1.2s * var(--k, 1)) ease-in-out infinite alternate; }
-.chr.anim.walk .b { animation: chr-waddle calc(.5s * var(--k, 1)) ease-in-out infinite alternate; }
-.chr.anim.walk .fl { animation: chr-foot calc(.25s * var(--k, 1)) ease-in-out infinite alternate; }
-.chr.anim.walk .fr { animation: chr-foot calc(.25s * var(--k, 1)) ease-in-out infinite alternate-reverse; }
+.chr .feet { transform-origin: 20px 46px; }
+.chr.anim.dance .floor { animation: chr-pulse calc(.47s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.dance .note { animation: chr-note calc(1.88s * var(--k, 1)) ease-out var(--d) infinite; }
+.chr.anim.dance .note.n2 { animation-delay: calc(var(--d) - .94s * var(--k, 1)); }
+
+/* Signature moves: each penguin gets one (m0 is the pump above). */
+/* m1 jump, hands in the air */
+.chr.anim.dance.m1 .b { animation: chr-jump calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m1 .feet { animation: chr-hop calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m1 .fl, .chr.anim.dance.m1 .fr { animation: none; }
+.chr.anim.dance.m1 .al { animation: chr-up-l calc(.47s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.dance.m1 .ar { animation: chr-up-r calc(.47s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+/* m2 shuffle, side to side with kicks */
+.chr.anim.dance.m2 .b { animation: chr-shuffle calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m2 .feet { animation: chr-slide calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m2 .fl { animation: chr-kick-l calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m2 .fr { animation: chr-kick-r calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m2 .al { animation: chr-swing-l calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m2 .ar { animation: chr-swing-r calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+/* m3 bounce, bounce, spin */
+.chr.anim.dance.m3 .b { animation: chr-spin calc(1.88s * var(--k, 1)) ease-in-out var(--d) infinite; }
+/* m4 both hands up, waving */
+.chr.anim.dance.m4 .b { animation: chr-sway calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m4 .al { animation: chr-wave-l calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m4 .ar { animation: chr-wave-r calc(.94s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.dance.m4 .face { animation: chr-bang calc(.47s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+/* m5 robot */
+.chr.anim.dance.m5 .b { animation: chr-robot calc(1.88s * var(--k, 1)) steps(1) var(--d) infinite; }
+.chr.anim.dance.m5 .al { animation: chr-robo-l calc(1.88s * var(--k, 1)) steps(1) var(--d) infinite; }
+.chr.anim.dance.m5 .ar { animation: chr-robo-r calc(1.88s * var(--k, 1)) steps(1) var(--d) infinite; }
+.chr.anim.dance.m5 .face { animation: chr-robo-head calc(.94s * var(--k, 1)) steps(1) var(--d) infinite; }
+
+.chr.anim.drink .ar { animation: chr-sip calc(3.2s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.drink .b { animation: chr-sway calc(2.4s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.eat .ar { animation: chr-bite calc(1.1s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.eat .face { animation: chr-chew calc(.55s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.wait .b { animation: chr-sway calc(1.4s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.wait .fr { animation: chr-tap calc(.35s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.sit .b { transform: translateY(5px) scale(1.06, .9); animation: chr-breathe calc(3s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.chill .b { animation: chr-sway calc(2.6s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.chill .face { animation: chr-nod calc(1.3s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.lost .face { animation: chr-look calc(1.8s * var(--k, 1)) ease-in-out var(--d) infinite; }
+.chr.anim.lost .bubble { animation: chr-pop calc(1.2s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.walk .b { animation: chr-waddle calc(.5s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.walk .fl { animation: chr-foot calc(.25s * var(--k, 1)) ease-in-out var(--d) infinite alternate; }
+.chr.anim.walk .fr { animation: chr-foot calc(.25s * var(--k, 1)) ease-in-out var(--d) infinite alternate-reverse; }
 .chr.anim.sleep .zz { animation: chr-zz 2.4s ease-in-out infinite; }
 .chr.sleep { opacity: .38; }
 
@@ -219,6 +251,39 @@ a { color: var(--color-accent-300); }
 @keyframes chr-arm-l { 0%, 100% { transform: rotate(10deg) } 50% { transform: rotate(150deg) } }
 @keyframes chr-arm-r { 0%, 100% { transform: rotate(-150deg) } 50% { transform: rotate(-10deg) } }
 @keyframes chr-foot { from { transform: translateY(0) } to { transform: translateY(-2px) } }
+@keyframes chr-pulse { from { opacity: .3 } to { opacity: .85 } }
+@keyframes chr-note { 0% { transform: translate(0, 4px) scale(.6); opacity: 0 } 20% { opacity: 1 } 100% { transform: translate(5px, -12px) scale(1); opacity: 0 } }
+@keyframes chr-jump {
+  0%, 100% { transform: translateY(0) scale(1.1, .88) }
+  30% { transform: translateY(-10px) scale(.94, 1.08) }
+  50% { transform: translateY(-12px) scale(1, 1) }
+  75% { transform: translateY(-2px) scale(.98, 1.03) }
+}
+@keyframes chr-hop { 0%, 100% { transform: translateY(0) } 30% { transform: translateY(-8px) } 50% { transform: translateY(-10px) } 75% { transform: translateY(-1px) } }
+@keyframes chr-up-l { from { transform: rotate(135deg) } to { transform: rotate(170deg) } }
+@keyframes chr-up-r { from { transform: rotate(-135deg) } to { transform: rotate(-170deg) } }
+@keyframes chr-shuffle { 0%, 100% { transform: translateX(-4px) rotate(-7deg) } 25% { transform: translateX(0) translateY(-3px) rotate(0) } 50% { transform: translateX(4px) rotate(7deg) } 75% { transform: translateX(0) translateY(-3px) rotate(0) } }
+@keyframes chr-slide { 0%, 100% { transform: translateX(-4px) } 50% { transform: translateX(4px) } }
+@keyframes chr-kick-l { 0%, 50%, 100% { transform: rotate(0) } 25% { transform: translateY(-3px) rotate(-30deg) } }
+@keyframes chr-kick-r { 0%, 50%, 100% { transform: rotate(0) } 75% { transform: translateY(-3px) rotate(30deg) } }
+@keyframes chr-swing-l { 0%, 100% { transform: rotate(40deg) } 50% { transform: rotate(-20deg) } }
+@keyframes chr-swing-r { 0%, 100% { transform: rotate(20deg) } 50% { transform: rotate(-40deg) } }
+@keyframes chr-spin {
+  0%, 20%, 40%, 100% { transform: translateY(0) scale(1.04, .96) }
+  10%, 30% { transform: translateY(-5px) scale(.97, 1.04) }
+  55% { transform: translateY(-7px) scaleX(1) }
+  65% { transform: translateY(-9px) scaleX(-1) }
+  75% { transform: translateY(-7px) scaleX(1) }
+  85% { transform: translateY(-9px) scaleX(-1) }
+  95% { transform: translateY(-2px) scaleX(1) }
+}
+@keyframes chr-wave-l { 0%, 100% { transform: rotate(130deg) } 50% { transform: rotate(175deg) } }
+@keyframes chr-wave-r { 0%, 100% { transform: rotate(-175deg) } 50% { transform: rotate(-130deg) } }
+@keyframes chr-bang { from { transform: translateY(0) rotate(0) } to { transform: translateY(1.6px) rotate(4deg) } }
+@keyframes chr-robot { 0% { transform: translateY(0) } 25% { transform: translateY(-2px) rotate(-5deg) } 50% { transform: translateY(0) } 75% { transform: translateY(-2px) rotate(5deg) } }
+@keyframes chr-robo-l { 0% { transform: rotate(90deg) } 25% { transform: rotate(0) } 50% { transform: rotate(160deg) } 75% { transform: rotate(90deg) } }
+@keyframes chr-robo-r { 0% { transform: rotate(0) } 25% { transform: rotate(-90deg) } 50% { transform: rotate(-90deg) } 75% { transform: rotate(-160deg) } }
+@keyframes chr-robo-head { 0% { transform: translateX(-1.5px) } 50% { transform: translateX(1.5px) } }
 @keyframes chr-sip { 0%, 55%, 100% { transform: rotate(0) } 70%, 85% { transform: rotate(-115deg) } }
 @keyframes chr-bite { 0%, 100% { transform: rotate(0) } 50% { transform: rotate(-100deg) } }
 @keyframes chr-chew { from { transform: translateY(0) } to { transform: translateY(1px) } }

@@ -11,6 +11,9 @@ const phase = (seed: string) => {
   return (Math.abs(h) % 1000) / 1000
 }
 
+// Six signature dance moves (see styles.css); each penguin keeps the same one.
+const MOVES = 6
+
 const WIG: Record<number, string> = { 7: '#ff4fd8', 8: '#3b8bff', 9: '#b6ff3b' }
 
 function Accessory({ acc }: { acc: number }) {
@@ -91,7 +94,7 @@ export function Penguin({
   activity: Activity
   seed: string
   size?: number
-  glow?: number // 0–1, how fresh the check-in is
+  glow?: number // 0–1, how fresh the pin is
   animate?: boolean
   queued?: boolean // yours, not sent yet: drawn as a dashed outline
   acc?: number
@@ -106,7 +109,7 @@ export function Penguin({
   const eyesHidden = acc === 1 || acc === 2 || acc === 3
   return (
     <svg
-      className={`chr ${animate ? 'anim' : ''} ${activity}`}
+      className={`chr ${animate ? 'anim' : ''} ${activity} m${Math.floor(phase(seed + 'move') * MOVES)}`}
       viewBox="-8 -16 56 70"
       width={size}
       height={size * 1.25}
@@ -121,7 +124,7 @@ export function Penguin({
       </defs>
       {/* neon aura and the laser glow on the floor */}
       <circle cx="20" cy="27" r="27" fill={`url(#a${id})`} />
-      <ellipse cx="20" cy="47" rx="14" ry="3.6" fill={color} opacity={idle ? 0.1 : 0.2 + 0.5 * glow} />
+      <ellipse className="floor" cx="20" cy="47" rx="14" ry="3.6" fill={color} opacity={idle ? 0.1 : 0.2 + 0.5 * glow} />
       <g className="feet">
         <ellipse className="fl" cx="14.5" cy="46" rx="4.5" ry="2.4" fill="#ffb02e" />
         <ellipse className="fr" cx="25.5" cy="46" rx="4.5" ry="2.4" fill="#ffb02e" />
@@ -163,6 +166,12 @@ export function Penguin({
           <Accessory acc={acc} />
         </g>
       </g>
+      {activity === 'dance' && animate && (
+        <g fill={color} fontFamily="Inter, sans-serif" fontWeight="700" style={{ filter: `drop-shadow(0 0 2px ${color})` }}>
+          <text className="note" x="30" y="2" fontSize="12">♪</text>
+          <text className="note n2" x="0" y="0" fontSize="11">♫</text>
+        </g>
+      )}
       {activity === 'lost' && (
         <text className="bubble" x="31" y="4" fontSize="13" fontWeight="700" fill="#fff" fontFamily="Inter, sans-serif">
           ?

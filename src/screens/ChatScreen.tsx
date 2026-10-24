@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { store, useStore, type Message, type State } from '../lib/store'
-import { alive } from '../lib/rules'
+import { fresh } from '../lib/rules'
 import { ago, ME, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
 import { Avatar, Freshness } from '../components/common'
@@ -14,7 +14,7 @@ type Item =
 function timeline(s: State): Item[] {
   const items: Item[] = Object.values(s.messages).map(m => ({ kind: 'msg', m, t: m.born }))
   for (const c of Object.values(s.checkins)) {
-    // A check-in row keeps its id when you extend it, so date it by the first tap.
+    // A check-in row keeps its id when you extend it, so date it by the first pin.
     items.push({ kind: 'move', id: c.id, memberId: c.member_id, placeId: c.place_id, nx: c.nx, ny: c.ny, t: c.created_at ?? c.born })
   }
   for (const m of s.members) if (m.created_at) items.push({ kind: 'join', memberId: m.id, t: new Date(m.created_at).getTime() })
@@ -41,8 +41,8 @@ export function ChatScreen() {
   const friends = s.members.filter(m => m.id !== meId)
   const active = friends.filter(m => !m.ghost).filter(m => {
     const d = Object.values(s.checkins).filter(c => c.member_id === m.id).sort((a, b) => b.born - a.born)[0]
-    return alive(d, now)
-  }).length + (alive(store.myDot(), now) ? 1 : 0)
+    return fresh(d, now)
+  }).length + (fresh(store.myDot(), now) ? 1 : 0)
   const items = timeline(s)
 
   const send = (t = text) => {
@@ -124,7 +124,7 @@ export function ChatScreen() {
           // Show the sender's name on the first message of a run (arr is newest-first).
           const prev = arr[idx + 1]
           const showName = !isMe && !(prev && prev.kind === 'msg' && prev.m.member_id === m.member_id && prev.m.type !== 'sys')
-          const placeLabel = m.place_id ? where(store.place(m.place_id), m.nx ?? 0.5, m.ny ?? 0.5) : 'No check-in'
+          const placeLabel = m.place_id ? where(store.place(m.place_id), m.nx ?? 0.5, m.ny ?? 0.5) : 'No pin'
           const pend = s.pending[m.id]
           const photoWait = m.type === 'photo' && (s.photoFailed[m.id] || s.signal === 'none')
           const syncLabel = !pend ? 'Sent' : pend === 'sending' ? (m.type === 'photo' ? 'Uploading…' : 'Sending…') : photoWait ? 'Photo queued · needs better signal' : 'Queued'
