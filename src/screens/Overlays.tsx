@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
-import { alive, remaining } from '../lib/rules'
-import { fmt, STATUS, where } from '../lib/venue'
+import { ageOf, pinned } from '../lib/rules'
+import { agoLong, STATUS, where } from '../lib/venue'
 import { useNow } from '../lib/view'
 import { smsHref, sosSms } from '../lib/sms'
 import { Avatar, Toggle } from '../components/common'
@@ -14,7 +14,7 @@ export function ProfileSheet() {
   const now = useNow()
   const me = store.me()
   const mine = store.myDot()
-  const live = alive(mine, now)
+  const live = pinned(mine, now)
   const [name, setName] = useState(me?.name ?? '')
   const [note, setNote] = useState(me?.note ?? '')
   const start = useRef({ status: me?.status, note: me?.note })
@@ -76,7 +76,7 @@ export function ProfileSheet() {
               style={{ width: '100%', border: 0, outline: 0, background: 'transparent', color: 'var(--color-text)', font: '500 20px var(--font-body)', letterSpacing: '-.02em', padding: 0 }}
             />
             <div style={{ ...label, color: nameClash ? 'var(--sos-text)' : label.color }}>
-              {nameClash ? 'Someone in the crew already has that name' : live ? `${where(store.place(mine!.place_id), mine!.nx, mine!.ny)} · ${fmt(remaining(mine!, now))} left` : 'Not checked in'}
+              {nameClash ? 'Someone in the crew already has that name' : live ? `${where(store.place(mine!.place_id), mine!.nx, mine!.ny)} · pinned ${agoLong(ageOf(mine!, now))}` : 'Not pinned yet'}
             </div>
           </div>
         </div>
@@ -108,7 +108,7 @@ export function ProfileSheet() {
           <i aria-hidden className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
           <span style={{ flex: 1, fontSize: 14 }}>
             Ghost
-            <span style={{ display: 'block', ...label }}>Your check-ins stay on your phone</span>
+            <span style={{ display: 'block', ...label }}>Your pins stay on your phone</span>
           </span>
           <Toggle on={me.ghost} onChange={v => store.setGhost(v)} label="Ghost mode" />
         </div>
@@ -146,8 +146,8 @@ export function ProfileSheet() {
           {push === 'on' && (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30 }}>
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Friends’ check-ins and status</span>
-                <Toggle on={prefs.updates} label="Check-in notifications" onChange={v => setPref('updates', v)} />
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Friends’ pins and status</span>
+                <Toggle on={prefs.updates} label="Pin notifications" onChange={v => setPref('updates', v)} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30 }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Chat messages</span>
@@ -219,7 +219,7 @@ export function SosScreen() {
   const safe = store.place('safe')
   const me = store.me()
   const mine = store.myDot()
-  const mineLive = alive(mine, Date.now())
+  const mineLive = pinned(mine, Date.now())
   const pct = (p * 100).toFixed(1)
 
   return (

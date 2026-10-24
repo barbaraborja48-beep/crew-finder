@@ -106,7 +106,7 @@ export function CrewScreen() {
         <i aria-hidden className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
         <span style={{ flex: 1, fontSize: 14 }}>
           Ghost mode
-          <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>Your check-ins stay on your phone</span>
+          <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>Your pins stay on your phone</span>
         </span>
         <Toggle on={!!me?.ghost} onChange={v => store.setGhost(v)} label="Ghost mode" />
       </div>
@@ -118,7 +118,7 @@ export function CrewScreen() {
         </button>
         <button className="btn btn-secondary" style={{ height: 44 }} onClick={() => store.ui({ screen: 'shortcut' })}>
           <i aria-hidden className="ph ph-lightning" />
-          One-tap check-in for iPhone
+          One-touch pin for iPhone
         </button>
       </div>
 
@@ -165,7 +165,7 @@ export function FindScreen() {
       </div>
       <div style={{ fontSize: 11, color: 'var(--color-neutral-400)', display: 'flex', alignItems: 'center', gap: 5 }}>
         <i aria-hidden className="ph ph-clock-counter-clockwise" />
-        Last check-in
+        Last pin
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', width: 'min(362px, calc(100% - 28px))' }}>
@@ -180,7 +180,7 @@ export function FindScreen() {
         </div>
         <div style={{ marginTop: 22, fontSize: 26, fontWeight: 500, letterSpacing: '-.02em' }}>{r.where}</div>
         <div style={{ marginTop: 4, fontSize: 13, color: 'var(--color-neutral-400)' }}>
-          {r.dot ? (age === 'now' ? 'Just now' : `${age} ago`) : 'Hasn’t checked in'} · {statusOf(r.member)[1]}
+          {r.dot ? (age === 'now' ? 'Just now' : `${age} ago`) : 'Hasn’t pinned yet'} · {statusOf(r.member)[1]}
           {r.member.battery != null ? ` · ${r.member.battery}% battery` : ''}
           {r.member.note ? ` · “${r.member.note}”` : ''}
         </div>

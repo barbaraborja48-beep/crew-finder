@@ -1,5 +1,5 @@
 import { store, useStore } from '../lib/store'
-import { alive } from '../lib/rules'
+import { fresh, pinned } from '../lib/rules'
 import { hasCloseUp, mapPos, outline, toMap, TYPES, MAP_W, MAP_H, type PlaceType, type Venue } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
@@ -17,7 +17,7 @@ export function MapScreen() {
   const sync = mySync(s, now)
   const rows = crewRows(s, now)
   const mine = store.myDot()
-  const meLive = alive(mine, now)
+  const meLive = pinned(mine, now)
   const { ui } = s
   const stages = s.places.filter(p => p.type === 'stage')
   const areas = s.places.filter(p => p.type !== 'stage' && ui.types[p.type])
@@ -98,7 +98,8 @@ export function MapScreen() {
             // Penguins grow a bit as you zoom (pins and labels stay the same size).
             const grow = Math.pow(z, 0.75) * inv
             const penguins = v && ui.heat === 'crew' ? mapPenguins(s, v, rows, now) : []
-            // Name tags: under the penguin, or above its head if another penguin is right there.
+            // Names: faint text under the penguin, or above its head if another penguin is right there.
+            // Times live in the list below, so the map stays calm.
             const labelAbove = new Set<string>()
             penguins.forEach((a, i) =>
               penguins.slice(0, i).forEach(b => {
@@ -183,17 +184,16 @@ export function MapScreen() {
                     style={{ position: 'absolute', left: pg.x, top: pg.y, zIndex: 4, border: 0, padding: 0, background: 'transparent', cursor: 'pointer', transform: `translate(-50%, -88%) scale(${grow})`, transformOrigin: '50% 88%' }}
                   >
                     <Penguin color={pg.color} acc={pg.acc} activity={pg.activity} seed={pg.key} size={18} glow={pg.glow} signal={pg.signal} saver={pg.saver} queued={pg.queued} />
-                    {(z >= 1.6 || !pg.live) && (
-                      <span
-                        style={{
-                          position: 'absolute', left: '50%', ...(labelAbove.has(pg.key) ? { bottom: '100%' } : { top: '96%' }),
-                          transform: `translateX(-50%) scale(${Math.min(1, 1.15 / Math.pow(z, 0.75))})`, transformOrigin: labelAbove.has(pg.key) ? '50% 100%' : '50% 0',
-                          fontSize: 8, fontWeight: 500, whiteSpace: 'nowrap', padding: '1px 5px', borderRadius: 999, background: 'rgba(0,0,0,.75)', color: '#fff', boxShadow: `0 0 0 .5px ${pg.color}`,
-                        }}
-                      >
-                        {pg.live ? (pg.mine ? 'You' : pg.name) : `${pg.name} · ${pg.age}`}
-                      </span>
-                    )}
+                    <span
+                      style={{
+                        position: 'absolute', left: '50%', ...(labelAbove.has(pg.key) ? { bottom: '100%' } : { top: '92%' }),
+                        transform: `translateX(-50%) scale(${Math.min(1, 1.15 / Math.pow(z, 0.75))})`, transformOrigin: labelAbove.has(pg.key) ? '50% 100%' : '50% 0',
+                        fontSize: 8, fontWeight: 500, whiteSpace: 'nowrap', pointerEvents: 'none',
+                        color: pg.live ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.32)', textShadow: '0 0 3px #000, 0 0 6px #000',
+                      }}
+                    >
+                      {pg.mine ? 'You' : pg.name}
+                    </span>
                   </button>
                 ))}
               </>
@@ -258,8 +258,8 @@ export function MapScreen() {
               store.ui({ areaSel: null })
             }}
           >
-            <i aria-hidden className="ph-bold ph-crosshair" />
-            {meHere ? 'I’m still here +1:00' : 'I’m here'}
+            <i aria-hidden className="ph-bold ph-map-pin" />
+            {meHere ? 'Still here' : 'Pin me here'}
           </button>
         </div>
       )}
@@ -281,7 +281,6 @@ interface MapPenguin {
   signal: number | null
   saver: boolean
   queued: boolean
-  age: string
 }
 
 /** Everyone's penguin on the overview map (yours too), sorted back to front. */
@@ -289,22 +288,22 @@ function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number): MapPengu
   const out: MapPenguin[] = []
   for (const r of rows) {
     const pl = r.dot && store.place(r.dot.place_id)
-    if (!r.dot || !pl) continue
+    if (!r.dot || !pl || !r.live) continue
     const p = mapPos(v, pl, r.dot.nx, r.dot.ny)
     out.push({
       key: r.member.id, name: r.member.name, mine: false, ...p, color: r.member.color, acc: r.member.acc ?? 0,
-      activity: activityFor(pl.type, r.member.status, r.live), live: r.live, glow: r.live ? fraction(r.dot, now) : 0,
-      signal: r.member.net ?? null, saver: !!r.member.saver, queued: false, age: ageLabel(r.ageS),
+      activity: activityFor(pl.type, r.member.status, r.fresh), live: r.fresh, glow: fraction(r.dot, now),
+      signal: r.member.net ?? null, saver: !!r.member.saver, queued: false,
     })
   }
   const me = store.me()
   const mine = store.myDot()
   const pl = mine && store.place(mine.place_id)
-  if (me && mine && pl && alive(mine, now)) {
+  if (me && mine && pl && pinned(mine, now)) {
     out.push({
       key: me.id, name: me.name, mine: true, ...mapPos(v, pl, mine.nx, mine.ny), color: me.color, acc: me.acc ?? 0,
-      activity: activityFor(pl.type, me.status, true), live: true, glow: fraction(mine, now),
-      signal: s.myNet, saver: s.dataSaver, queued: !!s.pending[mine.id] || me.ghost, age: '',
+      activity: activityFor(pl.type, me.status, fresh(mine, now)), live: fresh(mine, now), glow: fraction(mine, now),
+      signal: s.myNet, saver: s.dataSaver, queued: !!s.pending[mine.id] || me.ghost,
     })
   }
   return out.sort((a, b) => a.y - b.y)

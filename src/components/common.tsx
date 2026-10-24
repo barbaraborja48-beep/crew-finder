@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { store, useStore, type Screen } from '../lib/store'
-import { alive } from '../lib/rules'
+import { pinned } from '../lib/rules'
 import { hasCloseUp, STATUS, where } from '../lib/venue'
 import { spotSms, smsHref } from '../lib/sms'
 import { Penguin } from './Penguin'
@@ -55,7 +55,7 @@ export function Dot({ color, size = 11, glow = true, style }: { color: string; s
 
 const TABS: [Screen, string, string][] = [
   ['map', 'Map', 'ph ph-map-trifold'],
-  ['stage', 'Check in', 'ph-bold ph-crosshair'],
+  ['stage', 'Pin', 'ph-bold ph-map-pin'],
   ['chat', 'Chat', 'ph ph-chats-circle'],
   ['crew', 'Crew', 'ph ph-users-three'],
 ]
@@ -72,7 +72,7 @@ export function TabBar() {
           style={{ color: screen === k ? '#fff' : 'var(--color-neutral-500)' }}
           onClick={() => {
             const mine = store.myDot()
-            const onStage = mine && alive(mine, Date.now()) && hasCloseUp(store.place(mine.place_id))
+            const onStage = mine && pinned(mine, Date.now()) && hasCloseUp(store.place(mine.place_id))
             store.ui({ screen: k, areaSel: null, stage: k === 'stage' && onStage ? mine.place_id : s.ui.stage })
           }}
         >
@@ -147,12 +147,12 @@ export function Freshness({ style }: { style?: CSSProperties }) {
   )
 }
 
-/** When your check-in can't get out, offer to text it instead. */
+/** When your pin can't get out, offer to text it instead. */
 export function SmsFallback() {
   const s = useStore()
   const me = store.me()
   const mine = store.myDot()
-  if (!me || !mine || me.ghost || !s.pending[mine.id] || s.signal !== 'none' || !alive(mine, Date.now())) return null
+  if (!me || !mine || me.ghost || !s.pending[mine.id] || s.signal !== 'none' || !pinned(mine, Date.now())) return null
   const body = spotSms({
     name: me.name,
     where: where(store.place(mine.place_id), mine.nx, mine.ny),

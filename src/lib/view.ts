@@ -1,6 +1,6 @@
 // Small view-model helpers shared by the screens.
 import { useEffect, useState } from 'react'
-import { alive, remaining } from './rules'
+import { fresh, pinned } from './rules'
 import { latestDots, store, type Checkin, type Member, type State } from './store'
 import { ago, STATUS, where } from './venue'
 
@@ -25,7 +25,7 @@ export function mySync(s: State, now: number): SyncDef {
   const me = store.me()
   const dot = store.myDot()
   if (me?.ghost) return { label: 'Ghost', icon: 'ph ph-ghost', fg: 'var(--color-neutral-400)', ring: 'var(--shadow-sm)' }
-  if (!dot || !alive(dot, now)) return { label: 'Not checked in', icon: 'ph ph-crosshair', fg: 'var(--color-neutral-500)', ring: 'var(--shadow-sm)' }
+  if (!dot || !pinned(dot, now)) return { label: 'Not pinned', icon: 'ph ph-map-pin', fg: 'var(--color-neutral-500)', ring: 'var(--shadow-sm)' }
   const p = s.pending[dot.id]
   if (p === 'sending') return { label: 'Sending…', icon: 'ph ph-arrow-up', fg: '#bff9ff', ring: '0 0 0 1px #3bf0ff' }
   if (p === 'queued')
@@ -36,8 +36,8 @@ export function mySync(s: State, now: number): SyncDef {
 export interface CrewRow {
   member: Member
   dot: Checkin | null
-  live: boolean
-  rem: number
+  live: boolean // has a pin to show (last 12 h)
+  fresh: boolean // pinned in the last 15 min: active, not idle
   ageS: number
   where: string
 }
@@ -52,10 +52,10 @@ export function crewRows(s: State, now: number): CrewRow[] {
       return {
         member: m,
         dot,
-        live: alive(dot, now),
-        rem: dot ? remaining(dot, now) : 0,
+        live: pinned(dot, now),
+        fresh: fresh(dot, now),
         ageS: dot ? (now - dot.born) / 1000 : Infinity,
-        where: m.ghost ? 'Ghost' : dot ? where(store.place(dot.place_id), dot.nx, dot.ny) : 'No check-in yet',
+        where: m.ghost ? 'Ghost' : dot ? where(store.place(dot.place_id), dot.nx, dot.ny) : 'Not pinned yet',
       }
     })
     .sort((a, b) => Number(a.member.ghost) - Number(b.member.ghost) || a.ageS - b.ageS)

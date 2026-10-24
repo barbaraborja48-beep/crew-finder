@@ -97,6 +97,9 @@ export const fmt = (s: number) => {
 /** seconds → "now" / "9m" / "2h" */
 export const ago = (s: number) => (s < 60 ? 'now' : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`)
 
+/** seconds → "just now" / "9m ago" / "2h ago" */
+export const agoLong = (s: number) => (s < 60 ? 'just now' : `${ago(s)} ago`)
+
 /** Laser glow; f is the remaining fraction 0–1. */
 export const glow = (c: string, f: number) => {
   const g = 5 + 14 * f

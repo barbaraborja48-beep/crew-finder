@@ -51,7 +51,7 @@ export function Welcome() {
         </div>
       </div>
       <div style={{ fontSize: 14, color: 'var(--color-neutral-400)', lineHeight: 1.5 }}>
-        Tap where you are and your penguin shows up on your crew’s map, glowing for 2:30. No signal? It waits and sends when it can.
+        Pin where you are and your penguin shows up on your crew’s map. It glows while your pin is fresh and fades as it gets older, so everyone knows how recent it is. No signal? It waits and sends when it can.
       </div>
 
       <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 999, boxShadow: 'var(--shadow-sm)', background: 'var(--color-glass)', alignSelf: 'flex-start' }}>
