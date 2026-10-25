@@ -55,7 +55,7 @@ export function ProfileSheet() {
   const setPref = (k: keyof PushPrefs, v: boolean) => {
     const next = { ...prefs, [k]: v }
     setPrefs(next)
-    runPush(() => updatePrefs(me.id, next))
+    runPush(() => updatePrefs(me.id, next, s.dataSaver))
   }
 
   const label = { fontSize: 11, color: 'var(--color-neutral-500)' } as const
@@ -114,13 +114,16 @@ export function ProfileSheet() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <i aria-hidden className="ph ph-cell-signal-low" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
+          <i aria-hidden className={s.dataSaver ? 'ph ph-gauge' : 'ph ph-cell-signal-full'} style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
           <span style={{ flex: 1, fontSize: 14 }}>
-            Low-signal mode · always on
+            Low data mode
             <span style={{ display: 'block', ...label }}>
-              Updates only when you pin, open the app or tap refresh, with tiny requests that get through packed crowds. Photos load when you tap.
+              {s.dataSaver
+                ? 'On: updates when you pin, open the app or tap refresh, with tiny requests that get through packed crowds. Photos load when you tap.'
+                : 'Off: good connection mode. Friends’ pins and messages appear live. Turn on when the signal is bad.'}
             </span>
           </span>
+          <Toggle on={s.dataSaver} onChange={v => store.setLowData(v)} label="Low data mode" />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 14px', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}>
@@ -135,23 +138,24 @@ export function ProfileSheet() {
                     ? 'This browser can’t show notifications'
                     : push === 'blocked'
                       ? 'Blocked. Turn on in Settings → Notifications → Crew'
-                      : 'SOS and pings always come through'}
+                      : 'SOS, pings and meet-spot changes always come through'}
               </span>
             </span>
             {(push === 'on' || push === 'off') && (
-              <Toggle on={push === 'on'} label="Notifications" onChange={v => runPush(() => (v ? enablePush(me.id, prefs) : disablePush()))} />
+              <Toggle on={push === 'on'} label="Notifications" onChange={v => runPush(() => (v ? enablePush(me.id, prefs, s.dataSaver) : disablePush()))} />
             )}
           </div>
           {push === 'on' && (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30, opacity: s.dataSaver ? 0.6 : 1 }}>
                 <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Friends’ pins and status</span>
-                <Toggle on={prefs.updates} label="Pin notifications" onChange={v => setPref('updates', v)} />
+                <Toggle on={prefs.updates} label="Pin notifications" onChange={v => setPref('updates', v)} disabled={s.dataSaver} />
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30 }}>
-                <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Chat messages</span>
-                <Toggle on={prefs.chat} label="Chat notifications" onChange={v => setPref('chat', v)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 30, opacity: s.dataSaver ? 0.6 : 1 }}>
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--color-neutral-300)' }}>Chat messages and photos</span>
+                <Toggle on={prefs.chat} label="Chat notifications" onChange={v => setPref('chat', v)} disabled={s.dataSaver} />
               </div>
+              {s.dataSaver && <div style={{ ...label, paddingLeft: 30 }}>Paused in low data mode. Your choices come back when you turn it off.</div>}
             </>
           )}
           {pushBusy && <div style={label}>One moment…</div>}

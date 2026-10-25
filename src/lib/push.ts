@@ -44,6 +44,9 @@ async function publicKey() {
   throw new Error('The notification server didn’t answer. Check the push function is deployed (SETUP.md, step 10).')
 }
 
+/** Low data mode pauses pin and chat notifications at the server; SOS, pings and meet spot still come through. */
+const effective = (prefs: PushPrefs, lowData: boolean): PushPrefs => (lowData ? { updates: false, chat: false } : prefs)
+
 async function save(memberId: string, sub: PushSubscription, prefs: PushPrefs) {
   const j = sub.toJSON()
   const { error } = await supabase.rpc('save_push_subscription', {
@@ -58,7 +61,7 @@ async function save(memberId: string, sub: PushSubscription, prefs: PushPrefs) {
 }
 
 /** Must run from a tap: iPhones only show the permission prompt after a user gesture. */
-export async function enablePush(memberId: string, prefs: PushPrefs) {
+export async function enablePush(memberId: string, prefs: PushPrefs, lowData = false) {
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') throw new Error('Notifications are blocked. Turn them on in Settings → Notifications → Crew.')
   const reg = await navigator.serviceWorker.ready
@@ -71,14 +74,21 @@ export async function enablePush(memberId: string, prefs: PushPrefs) {
       throw new Error('Couldn’t turn on notifications in this browser. On iPhone, open Crew from your Home Screen and try again.')
     }
   }
-  await save(memberId, sub, prefs)
+  await save(memberId, sub, effective(prefs, lowData))
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
 }
 
-export async function updatePrefs(memberId: string, prefs: PushPrefs) {
+/** Your switches are remembered as you set them; the server gets what applies in your mode. */
+export async function updatePrefs(memberId: string, prefs: PushPrefs, lowData = false) {
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
   const sub = await (await navigator.serviceWorker.getRegistration())?.pushManager.getSubscription()
-  if (sub) await save(memberId, sub, prefs)
+  if (sub) await save(memberId, sub, effective(prefs, lowData))
+}
+
+/** After switching modes: tell the server which notifications this phone wants now. */
+export async function syncPushPrefs(memberId: string, lowData: boolean) {
+  const sub = await (await navigator.serviceWorker?.getRegistration())?.pushManager.getSubscription()
+  if (sub) await save(memberId, sub, effective(loadPrefs(), lowData))
 }
 
 export async function disablePush() {

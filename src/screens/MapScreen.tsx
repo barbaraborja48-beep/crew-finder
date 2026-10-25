@@ -3,7 +3,7 @@ import { fresh, pinned } from '../lib/rules'
 import { floorView, hasCloseUp, mapPos, onFloor, outline, placeAt, toMap, TYPES, MAP_W, MAP_H, type Place, type PlaceType, type Venue } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
-import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill } from '../components/common'
+import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill, WeakSignalHint } from '../components/common'
 import { ZoomPan } from '../components/ZoomPan'
 import { Penguin } from '../components/Penguin'
 import { activityFor, type Activity } from '../lib/penguin'
@@ -276,6 +276,7 @@ export function MapScreen() {
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Freshness />
         </div>
+        <WeakSignalHint />
         <SmsFallback />
         {rows.length === 0 && (
           <div style={{ padding: '18px 0', fontSize: 13, color: 'var(--color-neutral-500)', textAlign: 'center' }}>
