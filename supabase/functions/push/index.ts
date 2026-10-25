@@ -151,6 +151,8 @@ async function build(table: string, r: Record<string, unknown>): Promise<Note | 
       if (!r.to_member) return null
       return { title: name, body: `${name} is looking for you`, tag: `ping-${memberId}`, open: 'find', member: memberId, urgent: true, pref: 'always', only: r.to_member as string }
     case 'status':
+      // A new meet spot always comes through, like SOS and pings; other status changes follow "Pin notifications".
+      if (text.startsWith('set the meet spot')) return { title: `${name} · new meet spot`, body: text.replace(/^set the meet spot: /, ''), tag: `meet-${r.crew_id}`, open: 'crew', pref: 'always' }
       return { title: name, body: text, tag: `status-${memberId}`, open: 'find', member: memberId, pref: 'updates' }
     case 'text':
       return { title: name, body: text, tag: `chat-${r.crew_id}`, open: 'chat', pref: 'chat' }

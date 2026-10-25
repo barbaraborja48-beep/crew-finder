@@ -28,7 +28,8 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 8. New query again. Paste `supabase/migrations/20261027120000_mondo_disko.sql` and **Run**. This adds the Mondo Disko venue (Sala But, two floors). The Halloween map doesn't change.
 9. New query again. Paste `supabase/migrations/20261028120000_mondo_free_pins.sql` and **Run**. Mondo Disko: tap anywhere to pin, the real dance floor zones, and the smoking area.
 10. New query again. Paste `supabase/migrations/20261029120000_lineup_feedback_lowsignal.sql` and **Run**. Notifications only for SOS, pings and meet-spot changes; the DJ lineup; your feedback logs (Table Editor → `feedback` and `feature_taps`).
-11. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+11. New query again. Paste `supabase/migrations/20261030120000_notification_switches.sql` and **Run**. Pin and chat notifications work again, following each person's switches (paused for phones in low data mode).
+12. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
 
 > Already ran some of these before? Just run the ones you haven't. Each file is safe to run once on top of the previous ones.
 

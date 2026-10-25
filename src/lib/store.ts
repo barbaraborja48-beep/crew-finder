@@ -4,6 +4,7 @@
 // then a loop sends it whenever there is any signal. Rows use client-made
 // UUIDs, so a retry just upserts the same row again.
 import { useSyncExternalStore } from 'react'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase, ensureAuth, isTransient, configured } from './supabase'
 import { kv, outbox, type OutItem, type Table } from './db'
 import { compressPhoto } from './photo'
@@ -90,8 +91,10 @@ export interface State {
   syncing: boolean
   myNet: number | null // this phone's signal right now, 0–3
   lastSync: number | null // when we last heard from the server
-  dataSaver: boolean
-  photosShown: Record<string, true> // in data saver, friends' photos load on tap
+  dataSaver: boolean // low data mode (this phone's choice); off = good connection, live updates
+  weakSignal: boolean // the signal looks bad: suggest low data mode
+  live: boolean // good connection mode: the live connection is up
+  photosShown: Record<string, true> // in low data mode, friends' photos load on tap
   toast: { text: string; icon: string; fg: string; key: number; undo?: boolean } | null
   ui: {
     screen: Screen
@@ -126,7 +129,9 @@ const initial: State = {
   syncing: false,
   myNet: null,
   lastSync: null,
-  dataSaver: true, // friends' photos load when tapped
+  dataSaver: loadLowData(),
+  weakSignal: false,
+  live: false,
   photosShown: {},
   toast: null,
   ui: {
@@ -140,6 +145,15 @@ const initial: State = {
     sheet: false,
     sos: false,
   },
+}
+
+const LOW_DATA_KEY = 'pingu-low-data'
+function loadLowData() {
+  try {
+    return localStorage.getItem(LOW_DATA_KEY) === '1' // good connection unless you switched
+  } catch {
+    return false
+  }
 }
 
 // ─── row conversion ───────────────────────────────────────────────────────
@@ -267,6 +281,9 @@ class Store {
   }
 
   // ─── undo a pin (club maps pin on a single tap, so mis-taps happen) ─────
+  private channel: RealtimeChannel | null = null
+  private weakCount = 0
+  private weakDismissed = false
   private undoPinState: { prev: Checkin | null; row: Checkin } | null = null
   undoPin() {
     const u = this.undoPinState
@@ -380,6 +397,8 @@ class Store {
   }
 
   async leave() {
+    this.channel?.unsubscribe()
+    this.channel = null
     await this.resetLocal()
     this.set({ ...initial, phase: 'welcome', signal: this.state.signal })
   }
@@ -408,12 +427,81 @@ class Store {
       }
     })
     if (new URLSearchParams(location.search).get('open')) history.replaceState(null, '', '/')
-    // Low-signal mode, always: no live connection and no timer. The app talks to the server
-    // only when there's a reason: you pin or post (that same request brings back everyone's
-    // latest), you open or come back to the app, you tap refresh, or a notification arrives.
-    // Each of those is one small request (well under 1 KB when nothing much changed), which is
-    // what still gets through a packed, saturated crowd.
+    // Two modes, picked per phone:
+    // - Good connection: a live connection pushes friends' pins and messages within seconds,
+    //   plus a check every 20 s whenever that connection is down.
+    // - Low data: no live connection and no timer. The app talks to the server only when
+    //   there's a reason: you pin or post (that same request brings back everyone's latest),
+    //   you open or come back to the app, you tap refresh, or a notification arrives. Each is
+    //   one small request, which is what still gets through a packed, saturated crowd.
+    setInterval(() => {
+      if (document.visibilityState !== 'visible' || this.state.dataSaver || this.state.live) return
+      if (Date.now() - this.lastSyncTry >= 19_500) this.sync()
+    }, 5_000)
+    this.applyMode()
+    const me = this.me()
+    if (me && me.saver !== this.state.dataSaver) this.updateMe({ saver: this.state.dataSaver }) // friends' badge
     this.sync()
+  }
+
+  /** Low data mode on or off (this phone only). */
+  setLowData(on: boolean) {
+    try {
+      localStorage.setItem(LOW_DATA_KEY, on ? '1' : '0')
+    } catch {
+      /* private mode */
+    }
+    this.set({ dataSaver: on, weakSignal: false })
+    this.applyMode()
+    this.updateMe({ saver: on }) // friends see a small badge on your penguin
+    const memberId = this.state.session?.memberId
+    if (memberId) void import('./push').then(m => m.syncPushPrefs(memberId, on)).catch(() => {}) // pin/chat notifications pause in low data
+    this.toast(on ? 'Low data mode on' : 'Good connection mode · live updates', on ? 'ph ph-gauge' : 'ph ph-cell-signal-full')
+  }
+
+  /** "Not now" on the weak-signal hint: don't ask again until the app restarts. */
+  dismissWeakHint() {
+    this.weakDismissed = true
+    this.set({ weakSignal: false })
+  }
+
+  private applyMode() {
+    if (this.state.dataSaver) {
+      this.channel?.unsubscribe()
+      this.channel = null
+      this.set({ live: false })
+    } else if (!this.channel && this.state.session) {
+      this.subscribeRealtime(this.state.session.crewId)
+    }
+  }
+
+  private subscribeRealtime(crewId: string) {
+    const f = `crew_id=eq.${crewId}`
+    let errors = 0
+    this.channel = supabase
+      .channel(`crew-${crewId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checkins', filter: f }, p => {
+        if (p.new && 'id' in p.new) this.mergeCheckins([toCheckin(p.new)])
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: f }, p => {
+        if (p.new && 'id' in p.new) this.mergeMessages([toMessage(p.new)])
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: f }, p => {
+        if (p.new && 'id' in p.new) this.mergeMembers([p.new as Member])
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'crews', filter: `id=eq.${crewId}` }, p => {
+        this.set({ crew: p.new as Crew })
+      })
+      .subscribe(status => {
+        const live = status === 'SUBSCRIBED'
+        this.set({ live })
+        if (live) {
+          errors = 0
+          this.queueSync() // catch up on anything missed while it was down
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (++errors >= 2 && !this.weakDismissed) this.set({ weakSignal: true }) // can't hold a live connection here
+        }
+      })
   }
 
   /** Kept for callers that just want fresh data. */
@@ -544,6 +632,9 @@ class Store {
   private measureSignal(ms: number | null) {
     const level = ms == null ? 0 : ms < 1200 ? 3 : ms < 3500 ? 2 : 1
     this.set({ myNet: level })
+    // Two slow or failed syncs in a row: suggest low data mode (good connection only).
+    this.weakCount = level <= 1 ? this.weakCount + 1 : 0
+    if (this.weakCount >= 2 && !this.state.dataSaver && !this.weakDismissed) this.set({ weakSignal: true })
     const reported = this.me()?.net ?? null
     if (level === reported || level === 0) {
       this.netCandidate = null // can't report "no signal" without signal anyway
@@ -853,6 +944,7 @@ class Store {
   openFromNotification(open: string, member?: string | null) {
     if (open === 'chat') this.ui({ screen: 'chat', sheet: false, sos: false })
     else if (open === 'find' && member) this.ui({ screen: 'find', findId: member, sheet: false, sos: false })
+    else if (open === 'crew') this.ui({ screen: 'crew', sheet: false, sos: false })
     else this.ui({ screen: 'map', sheet: false, sos: false })
   }
 

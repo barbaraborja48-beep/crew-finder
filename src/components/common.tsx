@@ -34,15 +34,16 @@ export function SyncPill({ sync }: { sync: SyncDef }) {
   )
 }
 
-export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Toggle({ on, onChange, label, disabled = false }: { on: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
   return (
     <button
       className="toggle"
       role="switch"
       aria-checked={on}
       aria-label={label}
+      disabled={disabled}
       onClick={() => onChange(!on)}
-      style={{ background: on ? 'var(--color-accent-600)' : 'var(--color-neutral-800)', boxShadow: on ? '0 0 16px -2px var(--color-accent-500)' : 'none' }}
+      style={{ background: on ? 'var(--color-accent-600)' : 'var(--color-neutral-800)', boxShadow: on && !disabled ? '0 0 16px -2px var(--color-accent-500)' : 'none', opacity: disabled ? 0.35 : 1, cursor: disabled ? 'default' : 'pointer' }}
     >
       <span style={{ left: on ? 21 : 3 }} />
     </button>
@@ -137,7 +138,15 @@ export function Freshness({ style }: { style?: CSSProperties }) {
   const age = s.lastSync ? Math.floor((Date.now() - s.lastSync) / 1000) : null
   const waiting = Object.keys(s.pending).length > 0
   const clock = s.lastSync ? new Date(s.lastSync).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''
-  // No background updates, so say plainly how current the map is; tap to check now.
+  // Good connection: updates arrive by themselves, so just show that the line is live.
+  if (!s.dataSaver)
+    return (
+      <span style={{ padding: '4px 0', font: '400 11px var(--font-body)', color: 'var(--color-neutral-500)', display: 'flex', alignItems: 'center', gap: 5, ...style }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: s.live ? '#3bffb0' : '#ffc83b', boxShadow: s.live ? '0 0 6px #3bffb0' : 'none' }} />
+        {s.live ? 'Live' : 'Connecting…'}
+      </span>
+    )
+  // Low data: no background updates, so say plainly how current the map is; tap to check now.
   const label = s.syncing
     ? 'Checking…'
     : waiting && s.signal === 'none'
@@ -154,6 +163,24 @@ export function Freshness({ style }: { style?: CSSProperties }) {
       <i aria-hidden className={s.syncing ? 'ph ph-arrows-clockwise' : 'ph ph-arrow-clockwise'} />
       {label}
     </button>
+  )
+}
+
+/** Good connection mode, but the signal keeps failing: suggest low data mode (never switch by itself). */
+export function WeakSignalHint() {
+  const s = useStore()
+  if (!s.weakSignal || s.dataSaver) return null
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', margin: '4px 0 6px', borderRadius: 14, background: 'color-mix(in srgb, #ffc83b 12%, var(--color-surface))', boxShadow: '0 0 0 1px #ffc83b55' }}>
+      <i aria-hidden className="ph-bold ph-warning-circle" style={{ fontSize: 18, color: '#ffd97a' }} />
+      <span style={{ flex: 1, fontSize: 12, lineHeight: 1.35 }}>Signal’s weak here. Switch to low data mode?</span>
+      <button onClick={() => store.dismissWeakHint()} style={{ border: 0, background: 'transparent', color: 'var(--color-neutral-400)', font: '500 12px var(--font-body)', cursor: 'pointer', padding: '6px 4px' }}>
+        Not now
+      </button>
+      <button onClick={() => store.setLowData(true)} style={{ border: 0, borderRadius: 999, background: '#ffc83b', color: '#000', font: '600 12px var(--font-body)', cursor: 'pointer', padding: '6px 12px' }}>
+        Switch
+      </button>
+    </div>
   )
 }
 
