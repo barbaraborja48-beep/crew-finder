@@ -43,7 +43,9 @@ Read this first in a new chat. It covers what the app is, where everything lives
     - **Floor plans:** `public/assets/mondo-p1.webp` / `-p2.webp`, with the VIP tables erased.
 - **Other features:** crew chat (text, location, photos), status and note, ghost mode, SOS (hold the button), ping a friend, meet spot, an iPhone Shortcut for one-touch pins, and an offer to text your spot when a pin is stuck for 30 seconds.
 
-## Added 25 Oct evening (branch `pingu-buddies-plans`, see status below)
+## Added 25 Oct evening (merged to `main`, see status below)
+
+- **Halloween map has no filter chips any more** (Barbara asked). Stages, bars, WC, food and so on always show; open areas stay hidden unless you jump to one (e.g. the meet spot).
 
 - **Buddy up:** on a friend's page, "Buddy up" sends a request; they accept from a card on the Map or Crew tab. Everyone in a group (`members.buddy`, same id) is *shown* at the group's newest pin, huddled side by side, so anyone pinning moves them all. Worked out on each phone (`lib/social.ts` → `shownDots`), no copied pins. The pin message offers "Just me" (leave the group). "Let go" on a buddy's page lets them out and can guess where they went: a faded "Mar?" penguin until they pin (message type `guess`).
 - **Mute a person:** bell on each row of the Crew tab and on their page. Stops their pins, chat, pings, buddy requests and planned moves for you; SOS and meet-spot changes still come through. Stored in `member_prefs.mutes` (not visible to the crew).
@@ -85,12 +87,12 @@ The switch is in the profile (top-right avatar) and applies to that phone only. 
 
 Plus two fixes she already ran: `supabase/fixes/2026-10-23_push_apikey.sql` and `2026-10-23b_push_key_from_db.sql`.
 
-**Status:** Barbara ran 1 to 10. **11 is on the branch, not yet run.** Order when she says go: run SQL 11 → redeploy the push function → merge the branch to `main` (the new app needs SQL 11; SQL 11 is safe for the current app).
+**Status:** Barbara ran 1 to 10. The app with the new features is merged and live; she was given the links for **SQL 11** and the push function redeploy (both needed: until SQL 11 runs, the Halloween DJ screens don't show and stars/mutes wait in the outbox). Confirm she did both.
 
 ## Open items
 
-1. **Barbara is reviewing the preview** (screenshots) of the branch `pingu-buddies-plans`. Don't merge until she says go; then give her the SQL 11 link on `main` and the push redeploy step.
-2. **Push function must be redeployed with SQL 11** (Supabase → Edge Functions → push → Code → paste `supabase/functions/push/index.ts` → Deploy): mutes, buddy requests, planned moves, reminders and "Barbara + Lara, Mar" group pins all live there. Barbara thinks she redeployed the previous version; the deployment date in the dashboard tells.
+1. **Confirm SQL 11 ran** (result `halloween_sets 35`, `reminders_job_ready true`; if false, turn on pg_cron in Database → Extensions and run it again). She checked the DJ names against the poster and they're fine.
+2. **Push function must be redeployed after SQL 11** (Supabase → Edge Functions → push → Code → paste `supabase/functions/push/index.ts` → Deploy): mutes, buddy requests, planned moves, reminders and "Barbara + Lara, Mar" group pins all live there. Barbara thinks she redeployed the previous version; the deployment date in the dashboard tells.
 3. **Mondo lineup** was only set for Sat 24 → Sun 25 Oct. Barbara wants to do Mondo set lists later. Note: her "8 Nov, Chris Stassy" date is actually Brunch Electronik x BSMT LIVE at The Lenovo Garage (17:00–00:00, with DJ Tennis and DLOU), not Mondo. Open question whether to add that as a third venue. To change a lineup, update `venues.lineup` (JSON `{name, start, end}` in ISO with offset; festivals add `stage`) with a small SQL file.
 4. **Halloween crews** expire 48 h after the event (`ends_at`). Mondo has no end date, so its crews don't auto-delete.
 5. **Ideas raised but not built:**

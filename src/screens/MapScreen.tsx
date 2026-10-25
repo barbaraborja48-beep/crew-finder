@@ -25,12 +25,11 @@ export function MapScreen() {
   const mine = store.myShownDot() // with your buddies, if you're in a group
   const meLive = pinned(mine, now)
   const lineup = (s.venue?.lineup ?? []) as DjSet[]
-  // Every type shows unless switched off. Open areas start hidden on the big festival map
-  // (too many), but on a club map the balcony and entrances are the landmarks.
+  // Every type shows. Open areas stay hidden on the big festival map (too many) unless you
+  // jump to one (e.g. the meet spot); on a club map the balcony and entrances are the landmarks.
   const isOn = (k: PlaceType) => ui.types[k] ?? (k !== 'open' || floors.length > 0)
   const stages = s.places.filter(p => p.type === 'stage' && onFloor(p, ui.floor))
   const areas = s.places.filter(p => p.type !== 'stage' && isOn(p.type) && onFloor(p, ui.floor))
-  const typesHere = (Object.entries(TYPES) as [PlaceType, [string, string]][]).filter(([k]) => s.places.some(p => p.type === k))
   const onFloorCount = (n: number) =>
     liveFriends.filter(r => store.place(r.dot!.place_id)?.floor === n).length + (meLive && store.place(mine!.place_id)?.floor === n ? 1 : 0)
   const liveFriends = rows.filter(r => r.live && r.dot)
@@ -106,26 +105,6 @@ export function MapScreen() {
                 Tap the map to pin your spot
               </div>
             )}
-            {/* Filters for the big festival map; a club plan is small enough to show everything. */}
-            {!floors.length && <div className="no-scrollbar" style={{ position: 'absolute', left: 0, right: 0, top: 8, padding: '0 12px', display: 'flex', gap: 5, overflowX: 'auto', zIndex: 3 }}>
-              {typesHere.map(([k, [label, icon]]) => {
-                const on = isOn(k)
-                return (
-                  <button
-                    key={k}
-                    onClick={() => store.ui({ types: { ...ui.types, [k]: !on }, areaSel: null })}
-                    style={{
-                      flex: 'none', height: 26, border: 0, cursor: 'pointer', padding: '0 10px', borderRadius: 999, font: '500 10px var(--font-body)',
-                      background: on ? 'color-mix(in srgb, var(--color-accent-600) 22%, rgba(0,0,0,.7))' : 'rgba(0,0,0,.72)', color: on ? '#fff' : 'var(--color-neutral-400)',
-                      boxShadow: on ? '0 0 0 1px var(--color-accent-500), 0 0 14px -6px var(--color-accent)' : 'var(--shadow-sm)', display: 'flex', alignItems: 'center', gap: 4, backdropFilter: 'blur(8px)',
-                    }}
-                  >
-                    <i aria-hidden className={icon} style={{ fontSize: 12 }} />
-                    {label}
-                  </button>
-                )
-              })}
-            </div>}
             </>
           }
           corner={
