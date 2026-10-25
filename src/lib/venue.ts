@@ -50,7 +50,7 @@ export interface Venue {
   view_oy: number
   floors?: Floor[]
   default_meet?: string | null
-  lineup?: { name: string; start: string; end: string }[] // the DJ screen's set times
+  lineup?: { name: string; start: string; end: string; stage?: string }[] // the DJ screen's set times (festivals: per stage)
 }
 
 /** Venues you can start a crew at. The maps live in /public/assets. */

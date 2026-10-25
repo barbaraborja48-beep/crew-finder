@@ -1,8 +1,9 @@
 // Small view-model helpers shared by the screens.
 import { useEffect, useState } from 'react'
 import { fresh, pinned } from './rules'
-import { latestDots, store, type Checkin, type Member, type State } from './store'
+import { latestDots, store, type Checkin, type Member, type Message, type State } from './store'
 import { ago, STATUS, where } from './venue'
+import { activeMoves, groupOf, moveCrew, pendingInvites, shownDots, suggestions, type Move, type Suggestion } from './social'
 
 export function useNow(ms = 500) {
   const [now, setNow] = useState(Date.now())
@@ -25,7 +26,12 @@ export function mySync(s: State, now: number): SyncDef {
   const me = store.me()
   const dot = store.myDot()
   if (me?.ghost) return { label: 'Ghost', icon: 'ph ph-ghost', fg: 'var(--color-neutral-400)', ring: 'var(--shadow-sm)' }
-  if (!dot || !pinned(dot, now)) return { label: 'Not pinned', icon: 'ph ph-map-pin', fg: 'var(--color-neutral-500)', ring: 'var(--shadow-sm)' }
+  if (!dot || !pinned(dot, now)) {
+    // Not pinned yourself, but your buddies are: you're shown with them.
+    const buddies = store.buddies()
+    if (buddies.length && pinned(store.myShownDot(), now)) return { label: `With ${buddies.map(b => b.name).join(', ')}`, icon: 'ph ph-users-three', fg: 'var(--color-neutral-400)', ring: 'var(--shadow-sm)' }
+    return { label: 'Not pinned', icon: 'ph ph-map-pin', fg: 'var(--color-neutral-500)', ring: 'var(--shadow-sm)' }
+  }
   const p = s.pending[dot.id]
   if (p === 'sending') return { label: 'Sending…', icon: 'ph ph-arrow-up', fg: '#bff9ff', ring: '0 0 0 1px #3bf0ff' }
   if (p === 'queued')
@@ -40,18 +46,26 @@ export interface CrewRow {
   fresh: boolean // pinned in the last 15 min: active, not idle
   ageS: number
   where: string
+  huddle: { i: number; n: number } // buddies on one pin stand side by side
+  buddies: string[] // their buddy group (them included), if they're in one
+  muted: boolean
 }
 
 /** Everyone except you, freshest first, ghosts last. */
 export function crewRows(s: State, now: number): CrewRow[] {
-  const latest = latestDots(s.checkins)
+  const shown = shownDots(latestDots(s.checkins), s.members)
   return s.members
     .filter(m => m.id !== s.session?.memberId)
     .map(m => {
-      const dot = m.ghost ? null : (latest.get(m.id) ?? null)
+      const sh = m.ghost ? undefined : shown.get(m.id)
+      const dot = sh?.dot ?? null
+      const group = groupOf(s.members, m.id)
       return {
         member: m,
         dot,
+        huddle: { i: sh?.i ?? 0, n: sh?.n ?? 1 },
+        buddies: group.length > 1 ? group : [],
+        muted: s.prefs.mutes.includes(m.id),
         live: pinned(dot, now),
         fresh: fresh(dot, now),
         ageS: dot ? (now - dot.born) / 1000 : Infinity,
@@ -59,6 +73,27 @@ export function crewRows(s: State, now: number): CrewRow[] {
       }
     })
     .sort((a, b) => Number(a.member.ghost) - Number(b.member.ghost) || a.ageS - b.ageS)
+}
+
+/** Your own spot in your buddy huddle. */
+export function myHuddle(s: State) {
+  const sh = shownDots(latestDots(s.checkins), s.members).get(s.session?.memberId ?? '')
+  return { i: sh?.i ?? 0, n: sh?.n ?? 1 }
+}
+
+/** Faded penguins: planned moves that are due, and guesses about where someone went. */
+export function suggested(s: State, now: number): Suggestion[] {
+  return suggestions(Object.values(s.messages), shownDots(latestDots(s.checkins), s.members), now)
+}
+
+/** Planned moves you're part of. */
+export function myMoves(s: State, now: number): Move[] {
+  const me = s.session?.memberId ?? ''
+  return activeMoves(Object.values(s.messages), now).filter(mv => moveCrew(mv).includes(me) || mv.from === me)
+}
+
+export function buddyInvites(s: State, now: number) {
+  return pendingInvites(Object.values(s.messages), s.members, s.session?.memberId ?? '', s.answered, now) as Message[]
 }
 
 export const statusOf = (m: Member) => STATUS[m.status] ?? STATUS[0]

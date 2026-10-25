@@ -4,6 +4,7 @@
 //        key via the push_public_key() database function instead.
 // POST ← called by the database trigger on every new check-in spot and message,
 //        signed with x-hook-secret. Sends Web Push to the rest of the crew.
+//        Also called every minute with {reminder} for set reminders and planned moves.
 //
 // Deploy with "Verify JWT" turned OFF: the trigger can't send a user token,
 // so this function checks its own secret instead.
@@ -112,16 +113,22 @@ interface Note {
   title: string
   body: string
   tag: string
-  open: 'map' | 'chat' | 'find'
-  member?: string
+  open: 'map' | 'chat' | 'find' | 'crew' | 'stage'
+  member?: string // the friend (find) or stage (stage) to open
   urgent?: boolean
   pref: 'updates' | 'chat' | 'always'
   only?: string // a single recipient member id
+  to?: string[] // just these members
+  except?: string[] // not these (buddies who moved along)
+  unmutable?: boolean // SOS and meet-spot changes reach you even from someone you muted
 }
+
+/** "WC · Salida", "Brunch!": a spot to head to, without the zone. */
+const spotName = (p: Place | undefined) => (!p ? 'the spot' : p.type !== 'stage' && p.near ? `${p.name} · ${p.near}` : p.name)
 
 async function build(table: string, r: Record<string, unknown>): Promise<Note | null> {
   const memberId = r.member_id as string
-  const { data: sender } = await db.from('members').select('id,name,crew_id,ghost').eq('id', memberId).single()
+  const { data: sender } = await db.from('members').select('id,name,crew_id,ghost,buddy').eq('id', memberId).single()
   if (!sender) return null
   const { data: crew } = await db.from('crews').select('venue_id').eq('id', sender.crew_id).single()
   const { data: places } = await db.from('places').select('id,type,name,near,shape,floor').eq('venue_id', crew?.venue_id)
@@ -132,13 +139,18 @@ async function build(table: string, r: Record<string, unknown>): Promise<Note | 
     if (sender.ghost) return null
     // A check-in that sat in someone's outbox for ages isn't news any more.
     if (Date.now() - new Date(r.born as string).getTime() > 30 * 60_000) return null
+    // Buddied up: the whole group moved. "Barbara + Lara, Mar"
+    const { data: group } = sender.buddy
+      ? await db.from('members').select('id,name').eq('buddy', sender.buddy).eq('ghost', false).neq('id', memberId)
+      : { data: [] }
     return {
-      title: name,
+      title: group?.length ? `${name} + ${group.map(g => g.name).join(', ')}` : name,
       body: `Pinned · ${where(place(r.place_id), r.nx as number, r.ny as number)}${agoText(r.born as string)}`,
       tag: `spot-${memberId}`,
       open: 'find',
       member: memberId,
       pref: 'updates',
+      except: group?.map(g => g.id),
     }
   }
 
@@ -146,13 +158,13 @@ async function build(table: string, r: Record<string, unknown>): Promise<Note | 
   const label = r.place_id ? where(place(r.place_id), (r.nx as number) ?? 0.5, (r.ny as number) ?? 0.5) : ''
   switch (r.type) {
     case 'sos':
-      return { title: `SOS · ${name}`, body: text.replace(/^SOS · /, ''), tag: `sos-${r.id}`, open: 'chat', urgent: true, pref: 'always' }
+      return { title: `SOS · ${name}`, body: text.replace(/^SOS · /, ''), tag: `sos-${r.id}`, open: 'chat', urgent: true, pref: 'always', unmutable: true }
     case 'sys':
       if (!r.to_member) return null
       return { title: name, body: `${name} is looking for you`, tag: `ping-${memberId}`, open: 'find', member: memberId, urgent: true, pref: 'always', only: r.to_member as string }
     case 'status':
       // A new meet spot always comes through, like SOS and pings; other status changes follow "Pin notifications".
-      if (text.startsWith('set the meet spot')) return { title: `${name} · new meet spot`, body: text.replace(/^set the meet spot: /, ''), tag: `meet-${r.crew_id}`, open: 'crew', pref: 'always' }
+      if (text.startsWith('set the meet spot')) return { title: `${name} · new meet spot`, body: text.replace(/^set the meet spot: /, ''), tag: `meet-${r.crew_id}`, open: 'crew', pref: 'always', unmutable: true }
       return { title: name, body: text, tag: `status-${memberId}`, open: 'find', member: memberId, pref: 'updates' }
     case 'text':
       return { title: name, body: text, tag: `chat-${r.crew_id}`, open: 'chat', pref: 'chat' }
@@ -160,14 +172,43 @@ async function build(table: string, r: Record<string, unknown>): Promise<Note | 
       return { title: name, body: `Shared location · ${label}`, tag: `chat-${r.crew_id}`, open: 'chat', pref: 'chat' }
     case 'photo':
       return { title: name, body: label ? `Sent a photo · ${label}` : 'Sent a photo', tag: `chat-${r.crew_id}`, open: 'chat', pref: 'chat' }
+    case 'buddy':
+      if (!r.to_member) return null
+      return { title: `${name} wants to buddy up`, body: 'Tap to accept. You’ll move together on the map.', tag: `buddy-${memberId}`, open: 'crew', pref: 'always', only: r.to_member as string }
+    case 'move':
+      return moveNote(r, name, place)
   }
   return null
 }
 
+/** Planned moves: the invite, a cancel (to everyone in it) or a "can't make it" (to the planner). */
+async function moveNote(r: Record<string, unknown>, name: string, place: (id: unknown) => Place | undefined): Promise<Note | null> {
+  const meta = (r.meta ?? {}) as { in?: number; with?: string[]; cancel?: string; decline?: string }
+  const ref = meta.cancel ?? meta.decline
+  if (ref) {
+    const { data: orig } = await db.from('messages').select('member_id,place_id,meta').eq('id', ref).single()
+    if (!orig) return null
+    const spot = spotName(place(orig.place_id))
+    if (meta.decline) return { title: `${name} can’t make it`, body: spot, tag: `move-${ref}`, open: 'map', pref: 'always', to: [orig.member_id] }
+    return { title: `${name} cancelled the move`, body: `No more ${spot}`, tag: `move-${ref}`, open: 'map', pref: 'always', to: (orig.meta?.with ?? []) as string[] }
+  }
+  const spot = spotName(place(r.place_id))
+  const mins = meta.in ?? 0
+  return mins > 0
+    ? { title: `${name} · ${spot} in ${mins} min`, body: 'Meet there? Your penguins move when it’s time.', tag: `move-${r.id}`, open: 'map', pref: 'always', to: meta.with ?? [] }
+    : { title: `Meet ${name} at ${spot}`, body: 'Now · your penguins wait there until you confirm', tag: `move-${r.id}`, open: 'map', urgent: true, pref: 'always', to: meta.with ?? [] }
+}
+
 async function send(note: Note, crewId: string, senderId: string, c: Config) {
   const { data } = await db.from('push_subscriptions').select('*').eq('crew_id', crewId).neq('member_id', senderId)
+  // Who muted the sender: no notifications from them, except SOS and meet-spot changes.
+  const { data: prefs } = note.unmutable ? { data: [] } : await db.from('member_prefs').select('member_id,mutes').eq('crew_id', crewId).contains('mutes', [senderId])
+  const muted = new Set(((prefs ?? []) as { member_id: string }[]).map(p => p.member_id))
   const subs = ((data ?? []) as Sub[]).filter(s =>
-    note.only ? s.member_id === note.only : note.pref === 'always' || s[note.pref],
+    muted.has(s.member_id) || note.except?.includes(s.member_id) ? false
+      : note.only ? s.member_id === note.only
+      : note.to ? note.to.includes(s.member_id)
+      : note.pref === 'always' || s[note.pref],
   )
   const payload = JSON.stringify({ title: note.title, body: note.body, tag: note.tag, open: note.open, member: note.member, urgent: !!note.urgent })
   const results = await Promise.allSettled(
@@ -203,6 +244,12 @@ Deno.serve(async req => {
     if (req.headers.get('x-hook-secret') !== c.hook_secret) return json({ error: 'forbidden' }, 401)
     const body = await req.json()
     if (body.init) return json({ ready: !!c.vapid_public }) // database asking us to create the keys
+    if (body.reminder) {
+      // A set you picked, or a planned move, is due: just that person, whatever their switches.
+      const r = body.reminder
+      const note: Note = { title: r.title, body: r.body, tag: `${r.kind}-${r.ref}`.slice(0, 60), open: r.open, member: r.place ?? undefined, urgent: r.kind === 'move', pref: 'always', only: r.member_id, unmutable: true }
+      return json(await send(note, r.crew_id, '00000000-0000-0000-0000-000000000000', c))
+    }
     const { table, record } = body
     const note = await build(table, record)
     if (!note) return json({ skipped: true })

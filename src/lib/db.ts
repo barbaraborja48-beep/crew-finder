@@ -2,7 +2,7 @@
 // signal) and the outbox of rows waiting to be sent.
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 
-export type Table = 'checkins' | 'messages' | 'members' | 'crews'
+export type Table = 'checkins' | 'messages' | 'members' | 'crews' | 'prefs'
 
 export interface OutItem {
   key: string // `${table}:${id}` so a newer write replaces an older unsent one

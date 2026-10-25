@@ -2,13 +2,11 @@
 // Runs off the phone's clock (corrected by the server's), so it needs no data at all.
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { store } from '../lib/store'
+import { store, useStore } from '../lib/store'
+import { planTimeline, REMINDER_OPTIONS, reminderLabel, setKey, switchTimes, type DjSet, type PlanItem } from '../lib/social'
+import { Toggle } from './common'
 
-export interface DjSet {
-  name: string
-  start: string // ISO with offset, e.g. 2026-10-25T02:00:00+02:00
-  end: string
-}
+export type { DjSet }
 
 const TZ = 'Europe/Madrid'
 const hhmm = (iso: string) =>
@@ -100,10 +98,22 @@ export function DjDisplay({ sets, now, onOpen }: { sets: DjSet[]; now: number; o
   )
 }
 
-/** Tapped DJ screen: tonight's set times, then a second page with the next set, Shazam and steps. */
-export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; onClose: () => void }) {
+/**
+ * Tapped DJ screen: tonight's set times, then a second page with the next set, Shazam and steps.
+ * Festivals (sets with a stage) also get stage tabs, stars to plan your night, and "My night".
+ */
+export function DjSheet({ sets: stageSets, now, onClose, stage, startTab }: { sets: DjSet[]; now: number; onClose: () => void; stage?: string; startTab?: 'plan' }) {
+  const st = useStore()
+  const all = (st.venue?.lineup ?? []) as DjSet[]
+  const festival = !!stage && all.some(x => x.stage)
+  const stages = festival ? st.places.filter(p => p.type === 'stage' && all.some(x => x.stage === p.id)).sort((a, b) => (a.n ?? 0) - (b.n ?? 0)) : []
+  const [tab, setTab] = useState<string>(startTab ?? stage ?? '')
+  const sets = festival && tab !== 'plan' ? all.filter(x => x.stage === tab) : stageSets
   const { sorted, current, next } = lineupState(sets, now)
   const [page, setPage] = useState(0)
+  const [editing, setEditing] = useState<string | null>(null) // set whose reminder options are open
+  const plan = st.prefs.plan
+  const pick = (x: DjSet) => plan.find(i => i.k === setKey(x))
   const [premium, setPremium] = useState<null | 'shazam' | 'steps'>(null)
   const open = (f: 'shazam' | 'steps') => {
     store.logFeature(f) // count who wants it
@@ -128,7 +138,21 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
             <i aria-hidden className="ph ph-x" />
           </button>
         </div>
-        {premium ? (
+        {festival && !premium && (
+          <div className="no-scrollbar dj-tabs">
+            <button className={tab === 'plan' ? 'on' : ''} onClick={() => setTab('plan')}>
+              <i aria-hidden className="ph-fill ph-star" style={{ color: '#ffc83b' }} /> My night{plan.length ? ` · ${plan.length}` : ''}
+            </button>
+            {stages.map(p => (
+              <button key={p.id} className={tab === p.id ? 'on' : ''} onClick={() => setTab(p.id)}>
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {festival && tab === 'plan' && !premium ? (
+          <MyNight lineup={all} plan={plan} now={now} editing={editing} setEditing={setEditing} />
+        ) : premium ? (
           <Premium feature={premium} onBack={() => setPremium(null)} />
         ) : (
         <>
@@ -145,18 +169,20 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
                     <span>{hhmm(s.end)}</span>
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="dj-row-name">{s.name}</div>
+                    <div className="dj-row-name" style={festival ? { fontSize: 19 } : undefined}>{s.name}</div>
                     {live && (
                       <div className="dj-bar" style={{ marginTop: 6 }}>
                         <span style={{ width: `${f * 100}%` }} />
                       </div>
                     )}
+                    {festival && pick(s) && !done && <RemindChip item={pick(s)!} open={editing === setKey(s)} onToggle={() => setEditing(editing === setKey(s) ? null : setKey(s))} />}
                   </div>
                   {live && (
                     <span className="dj-now">
                       <span className="dj-live" /> NOW
                     </span>
                   )}
+                  {festival && !done && <Star on={!!pick(s)} onClick={() => store.togglePick(s)} name={s.name} />}
                 </div>
               )
             })}
@@ -192,6 +218,92 @@ export function DjSheet({ sets, now, onClose }: { sets: DjSet[]; now: number; on
       </div>
     </div>,
     document.querySelector('.app') ?? document.body,
+  )
+}
+
+function Star({ on, onClick, name }: { on: boolean; onClick: () => void; name: string }) {
+  return (
+    <button className="dj-star" aria-pressed={on} aria-label={on ? `Remove ${name} from my night` : `Add ${name} to my night`} onClick={onClick}>
+      <i aria-hidden className={on ? 'ph-fill ph-star' : 'ph ph-star'} />
+    </button>
+  )
+}
+
+/** "🔔 10 min before", tap for the options. */
+function RemindChip({ item, open, onToggle }: { item: PlanItem; open: boolean; onToggle: () => void }) {
+  return (
+    <>
+      <button className="dj-remind" onClick={onToggle}>
+        <i aria-hidden className={item.r == null ? 'ph ph-bell-slash' : 'ph-fill ph-bell-ringing'} />
+        {item.r == null ? 'No reminder' : reminderLabel(item.r)}
+        <i aria-hidden className={open ? 'ph ph-caret-up' : 'ph ph-caret-down'} />
+      </button>
+      {open && (
+        <div className="dj-remind-opts">
+          {REMINDER_OPTIONS.map(r => (
+            <button key={String(r)} className={item.r === r ? 'on' : ''} onClick={() => store.setReminder(item.k, r)}>
+              {r == null ? 'Off' : r === 0 ? 'At start' : `${r} min`}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+/** Your picks in order, clashes with a switch time, reminders, and whether the crew can see it. */
+function MyNight({ lineup, plan, now, editing, setEditing }: { lineup: DjSet[]; plan: PlanItem[]; now: number; editing: string | null; setEditing: (k: string | null) => void }) {
+  const st = useStore()
+  const rows = planTimeline(plan, lineup)
+  const stageName = (id?: string) => st.places.find(p => p.id === id)?.name ?? ''
+  const hm = (t: number) => hhmm(new Date(t).toISOString())
+  return (
+    <section className="dj-page" style={{ position: 'relative', zIndex: 2, minHeight: 320 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 2px 12px' }}>
+        <span style={{ flex: 1 }}>
+          <span className="dj-label" style={{ color: '#fff' }}>Show my plan to the crew</span>
+          <span className="dj-label" style={{ display: 'block', fontSize: 11 }}>
+            {st.prefs.plan_shared ? 'Friends see it on your profile' : 'Only you can see it'}
+          </span>
+        </span>
+        <Toggle on={st.prefs.plan_shared} onChange={v => store.setPlanShared(v)} label="Share my plan" />
+      </div>
+      {rows.length === 0 && <div className="dj-label" style={{ padding: '30px 4px', textAlign: 'center' }}>Tap the star next to a set to add it to your night.</div>}
+      {rows.map((r, i) => {
+        const done = r.to <= now
+        const live = r.from <= now && now < r.to
+        const nextRow = rows[i + 1]
+        return (
+          <div key={r.item.k}>
+            <div className={`dj-row ${live ? 'live' : ''} ${done ? 'done' : ''}`} style={{ marginBottom: r.clash ? 4 : 8 }}>
+              <div className="dj-row-time">
+                {hm(r.from)}
+                <span>{hm(r.to)}</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="dj-row-name" style={{ fontSize: 18 }}>{r.set.name}</div>
+                <div className="dj-label" style={{ fontSize: 11 }}>{stageName(r.set.stage)}</div>
+                {!done && <RemindChip item={r.item} open={editing === r.item.k} onToggle={() => setEditing(editing === r.item.k ? null : r.item.k)} />}
+              </div>
+              <Star on onClick={() => store.togglePick(r.set)} name={r.set.name} />
+            </div>
+            {r.clash && nextRow && (
+              <div className="dj-clash">
+                <i aria-hidden className="ph-bold ph-arrows-left-right" />
+                <span style={{ flex: 1 }}>Clash · switch to {nextRow.set.name} at</span>
+                <select value={nextRow.from} onChange={e => store.setSwitch(nextRow.item.k, +e.target.value)}>
+                  {switchTimes(r.set, nextRow.set).map(t => (
+                    <option key={t} value={t}>
+                      {hm(t)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </section>
   )
 }
 

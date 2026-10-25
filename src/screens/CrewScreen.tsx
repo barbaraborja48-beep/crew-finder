@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { floorView, glow, where } from '../lib/venue'
 import { rowOpacity } from '../lib/rules'
-import { useNow, crewRows, statusOf, ageLabel, isStandalone, isIOS } from '../lib/view'
+import { useNow, crewRows, statusOf, ageLabel, isStandalone, isIOS, suggested } from '../lib/view'
 import { Avatar, Toggle } from '../components/common'
+import { LetGoSheet, PlanMoveSheet, SocialBanners } from '../components/Social'
+import { planTimeline, type DjSet } from '../lib/social'
 
 export function CrewScreen() {
   const s = useStore()
@@ -11,6 +13,8 @@ export function CrewScreen() {
   const rows = crewRows(s, now)
   const me = store.me()
   const [editMeet, setEditMeet] = useState(false)
+  const [planning, setPlanning] = useState(false)
+  const buddies = store.buddies()
   const meet = store.place(s.crew?.meet_spot_place_id)
   const link = `${location.origin}/?crew=${s.crew?.invite_code ?? ''}`
 
@@ -36,6 +40,22 @@ export function CrewScreen() {
         </div>
       )}
 
+      <div>
+        <SocialBanners plan={false} />
+        {buddies.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', margin: '4px 0 6px', borderRadius: 14, boxShadow: '0 0 0 1px var(--color-accent-700)' }}>
+            <i aria-hidden className="ph-bold ph-users-three" style={{ fontSize: 18, color: 'var(--color-accent-200)' }} />
+            <span style={{ flex: 1, fontSize: 12, lineHeight: 1.35 }}>
+              <b style={{ fontWeight: 500 }}>Moving together with {buddies.map(b => b.name).join(', ')}</b>
+              <span style={{ display: 'block', color: 'var(--color-neutral-400)' }}>When one of you pins, you all move</span>
+            </span>
+            <button onClick={() => store.goSolo()} style={{ border: 0, borderRadius: 999, background: 'transparent', boxShadow: 'var(--shadow-sm)', color: 'var(--color-neutral-200)', font: '600 12px var(--font-body)', cursor: 'pointer', padding: '6px 12px' }}>
+              Just me
+            </button>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {rows.map(r => (
           <button
@@ -47,7 +67,10 @@ export function CrewScreen() {
               <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={38} />
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 15, fontWeight: 500 }}>{r.member.name}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 15, fontWeight: 500 }}>
+                {r.member.name}
+                {buddies.some(b => b.id === r.member.id) && <i aria-hidden className="ph-bold ph-link" title="Buddied with you" style={{ fontSize: 12, color: 'var(--color-accent-300)' }} />}
+              </span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--color-neutral-500)' }}>{r.where}</span>
               {!r.member.ghost && (
                 <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-400)', marginTop: 2 }}>{r.member.note ? `“${r.member.note}”` : statusOf(r.member)[1]}</span>
@@ -61,6 +84,18 @@ export function CrewScreen() {
                   {r.member.battery}%
                 </span>
               )}
+            </span>
+            <span
+              role="button"
+              aria-label={r.muted ? `Unmute ${r.member.name}` : `Mute ${r.member.name}`}
+              aria-pressed={r.muted}
+              onClick={e => {
+                e.stopPropagation()
+                store.setMuted(r.member.id, !r.muted)
+              }}
+              style={{ width: 34, height: 34, flex: 'none', display: 'grid', placeItems: 'center', borderRadius: '50%', fontSize: 17, color: r.muted ? 'var(--queued)' : 'var(--color-neutral-500)', boxShadow: r.muted ? '0 0 0 1px #ffc83b66' : 'none' }}
+            >
+              <i aria-hidden className={r.muted ? 'ph ph-bell-slash' : 'ph ph-bell'} />
             </span>
           </button>
         ))}
@@ -116,6 +151,12 @@ export function CrewScreen() {
           <i aria-hidden className="ph ph-user-plus" />
           Invite friends
         </button>
+        {rows.length > 0 && (
+          <button className="btn btn-secondary" style={{ height: 44 }} onClick={() => setPlanning(true)}>
+            <i aria-hidden className="ph-bold ph-path" />
+            Plan a move
+          </button>
+        )}
         <button className="btn btn-secondary" style={{ height: 44 }} onClick={() => store.ui({ screen: 'shortcut' })}>
           <i aria-hidden className="ph ph-lightning" />
           One-touch pin for iPhone
@@ -134,6 +175,7 @@ export function CrewScreen() {
           Leave
         </button>
       </div>
+      {planning && <PlanMoveSheet onClose={() => setPlanning(false)} />}
     </div>
   )
 }
@@ -142,7 +184,15 @@ export function FindScreen() {
   const s = useStore()
   const now = useNow()
   const r = crewRows(s, now).find(x => x.member.id === s.ui.findId)
+  const [sheet, setSheet] = useState<null | 'move' | 'letgo'>(null)
   if (!r || !s.venue) return null
+  const me = store.me()
+  const together = !!me?.buddy && r.member.buddy === me.buddy && r.buddies.length > 1
+  const guess = suggested(s, now).find(g => g.memberId === r.member.id && g.kind === 'guess')
+  const guessBy = guess && s.members.find(m => m.id === s.messages[guess.ref]?.member_id)
+  const theirPlan = s.plans[r.member.id]
+  const lineup = (s.venue.lineup ?? []) as DjSet[]
+  const planRows = theirPlan ? planTimeline(theirPlan, lineup) : []
   const pl = r.dot ? store.place(r.dot.place_id) : undefined
   const v = floorView(s.venue, pl?.floor ?? s.ui.floor) // their floor's plan
   const isArea = pl && pl.type !== 'stage'
@@ -184,9 +234,63 @@ export function FindScreen() {
           {r.member.battery != null ? ` · ${r.member.battery}% battery` : ''}
           {r.member.note ? ` · “${r.member.note}”` : ''}
         </div>
+        {(together || r.buddies.length > 1) && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-accent-200)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <i aria-hidden className="ph-bold ph-link" />
+            {together ? 'Buddied with you' : `Moving with ${s.members.filter(m => r.buddies.includes(m.id) && m.id !== r.member.id).map(m => m.name).join(', ')}`}
+          </div>
+        )}
+        {guess && (
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-neutral-300)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <i aria-hidden className="ph ph-question" />
+            Probably at {where(store.place(guess.placeId))}
+            {guessBy ? ` · ${guessBy.id === me?.id ? 'your' : `${guessBy.name}’s`} guess` : ''}
+          </div>
+        )}
+        {planRows.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div className="kicker" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <i aria-hidden className="ph-fill ph-star" style={{ color: '#ffc83b' }} />
+              {r.member.name}’s night
+            </div>
+            {planRows.map(p => (
+              <div key={p.item.k} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--color-neutral-900)', opacity: p.to <= now ? 0.45 : 1 }}>
+                <span style={{ width: 44, fontSize: 12, color: 'var(--color-neutral-400)', fontVariantNumeric: 'tabular-nums' }}>{clock(p.from)}</span>
+                <span style={{ flex: 1, fontSize: 14, fontWeight: 500 }}>{p.set.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--color-neutral-500)' }}>{store.place(p.set.stage)?.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div style={{ marginTop: 'auto', alignSelf: 'stretch', padding: '24px 20px calc(var(--safe-bottom) + 24px)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+      <div style={{ marginTop: 'auto', alignSelf: 'stretch', padding: '24px 20px 0', display: 'grid', gridTemplateColumns: '1fr 1fr 46px', gap: 10 }}>
+        {together ? (
+          <button className="btn btn-secondary" style={{ height: 46 }} onClick={() => setSheet('letgo')}>
+            <i aria-hidden className="ph ph-person-simple-walk" />
+            Let go
+          </button>
+        ) : (
+          <button className="btn btn-secondary" style={{ height: 46 }} disabled={r.member.ghost} onClick={() => store.buddyUp(r.member)}>
+            <i aria-hidden className="ph-bold ph-users-three" />
+            Buddy up
+          </button>
+        )}
+        <button className="btn btn-secondary" style={{ height: 46 }} disabled={r.member.ghost} onClick={() => setSheet('move')}>
+          <i aria-hidden className="ph-bold ph-path" />
+          Plan a move
+        </button>
+        <button
+          className="btn btn-secondary"
+          aria-label={r.muted ? `Unmute ${r.member.name}` : `Mute ${r.member.name}`}
+          aria-pressed={r.muted}
+          style={{ height: 46, padding: 0, color: r.muted ? 'var(--queued)' : undefined }}
+          onClick={() => store.setMuted(r.member.id, !r.muted)}
+        >
+          <i aria-hidden className={r.muted ? 'ph ph-bell-slash' : 'ph ph-bell'} style={{ fontSize: 18 }} />
+        </button>
+      </div>
+      <div style={{ alignSelf: 'stretch', padding: '10px 20px calc(var(--safe-bottom) + 24px)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <button className="btn btn-secondary" style={{ height: 46 }} disabled={!pl} onClick={() => pl && store.openPlace(pl.id)}>
           <i aria-hidden className="ph ph-map-pin" />
           {isArea ? 'Show on map' : 'Go to stage'}
@@ -196,6 +300,10 @@ export function FindScreen() {
           Ping
         </button>
       </div>
+      {sheet === 'move' && <PlanMoveSheet preset={r.member.id} onClose={() => setSheet(null)} />}
+      {sheet === 'letgo' && <LetGoSheet member={r.member} onClose={() => setSheet(null)} />}
     </div>
   )
 }
+
+const clock = (t: number) => new Intl.DateTimeFormat('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }).format(new Date(t))

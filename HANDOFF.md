@@ -1,6 +1,6 @@
 # PinGü handoff
 
-Read this first in a new chat. It covers what the app is, where everything lives, how Barbara likes to work, what's done, and what's still open (as of 25 Oct 2026).
+Read this first in a new chat. It covers what the app is, where everything lives, how Barbara likes to work, what's done, and what's still open (as of 25 Oct 2026, evening).
 
 ## Who you're working with
 
@@ -43,6 +43,16 @@ Read this first in a new chat. It covers what the app is, where everything lives
     - **Floor plans:** `public/assets/mondo-p1.webp` / `-p2.webp`, with the VIP tables erased.
 - **Other features:** crew chat (text, location, photos), status and note, ghost mode, SOS (hold the button), ping a friend, meet spot, an iPhone Shortcut for one-touch pins, and an offer to text your spot when a pin is stuck for 30 seconds.
 
+## Added 25 Oct evening (branch `pingu-buddies-plans`, see status below)
+
+- **Buddy up:** on a friend's page, "Buddy up" sends a request; they accept from a card on the Map or Crew tab. Everyone in a group (`members.buddy`, same id) is *shown* at the group's newest pin, huddled side by side, so anyone pinning moves them all. Worked out on each phone (`lib/social.ts` → `shownDots`), no copied pins. The pin message offers "Just me" (leave the group). "Let go" on a buddy's page lets them out and can guess where they went: a faded "Mar?" penguin until they pin (message type `guess`).
+- **Mute a person:** bell on each row of the Crew tab and on their page. Stops their pins, chat, pings, buddy requests and planned moves for you; SOS and meet-spot changes still come through. Stored in `member_prefs.mutes` (not visible to the crew).
+- **Halloween DJ screens:** every stage close-up has the DJ screen (35 sets from the poster, `venues.lineup` entries now carry `stage`). The main map shows "▶ DJ name" under each stage. Mondo keeps its single lineup, untouched.
+- **My night:** stars in the lineup sheet (stage tabs + "My night" tab), reminders per set (off, at start, 5/10/15/30 min before; the last choice is the default), clashes with a switch-time picker, optional sharing (then it shows on your profile page for the crew). Next pick shows on the map. Reminders are sent by `fire_reminders()` every minute (pg_cron).
+- **Plan a move:** "going to the WC in 10 min" with chosen friends (from their page or the Crew tab). They're notified now; at the time everyone in it gets "Meet Barbara at WC", faded penguins wait at the spot, and a card asks "I'm here" (pins you) or "Not going". Planner can cancel; others can say they can't make it (message type `move`, details in `messages.meta`).
+- **Weak-signal fixes** (both venues): a stuck request is given up after 10 s instead of 20 (photos 30 s); retries at 1.5, 3, 6 then every 10 s; photos upload in their own lane so a stuck photo never holds up a pin; in good connection mode the live connection pauses while sends keep failing; the login is renewed while signal is good. Measured locally: stuck request 22 s → 12 s, pin behind a stuck photo 19 s → 0.3 s.
+- **Vercel's paid plan won't help signal:** Vercel only serves the app files (cached on the phone). Pins go phone → Supabase (region: Ireland, which is fine for Madrid).
+
 ## The two connection modes (newest change, live)
 
 The switch is in the profile (top-right avatar) and applies to that phone only. It's saved in localStorage as `pingu-low-data`.
@@ -71,19 +81,17 @@ The switch is in the profile (top-right avatar) and applies to that phone only. 
 8. `20261028120000_mondo_free_pins.sql`: Mondo zones, real dance floor, smoking area, framing
 9. `20261029120000_lineup_feedback_lowsignal.sql`: DJ lineup, `feature_taps` and `feedback` logs (it also limited notifications, which file 10 reverses)
 10. `20261030120000_notification_switches.sql`: pin and chat notifications back on, filtered per person
+11. `20261031120000_buddies_plans_moves.sql`: buddies, mutes, Halloween lineup per stage, plans + reminders (pg_cron job `pingu-reminders`), planned moves, new `crew_sync` (adds `p_prefs`)
 
 Plus two fixes she already ran: `supabase/fixes/2026-10-23_push_apikey.sql` and `2026-10-23b_push_key_from_db.sql`.
 
-**Status:** Barbara ran 1 to 9. She was just given the link for **10**, so confirm she ran it.
+**Status:** Barbara ran 1 to 10. **11 is on the branch, not yet run.** Order when she says go: run SQL 11 → redeploy the push function → merge the branch to `main` (the new app needs SQL 11; SQL 11 is safe for the current app).
 
 ## Open items
 
-1. **Confirm SQL 10 was run.** Without it, pin and chat notifications stay off for everyone.
-2. **Redeploy the push function (optional, about 1 minute):** paste the current `supabase/functions/push/index.ts` into Supabase → Edge Functions → push → Code → Deploy. It brings:
-   - meet-spot changes reaching everyone ("Name · new meet spot"),
-   - "Pinned" wording instead of "Checked in",
-   - Mondo zone names in notifications.
-3. **DJ lineup** is only set for tonight: Sat 24 → Sun 25 Oct 2026, Madrid time. The clocks go back at 03:00, hence +02:00 before and +01:00 after. To change it, update `venues.lineup` (JSON list of `{name, start, end}` in ISO with offset) for venue `e1e0a000-0000-4000-8000-000000000002` with a small SQL file. No app change is needed.
+1. **Barbara is reviewing the preview** (screenshots) of the branch `pingu-buddies-plans`. Don't merge until she says go; then give her the SQL 11 link on `main` and the push redeploy step.
+2. **Push function must be redeployed with SQL 11** (Supabase → Edge Functions → push → Code → paste `supabase/functions/push/index.ts` → Deploy): mutes, buddy requests, planned moves, reminders and "Barbara + Lara, Mar" group pins all live there. Barbara thinks she redeployed the previous version; the deployment date in the dashboard tells.
+3. **Mondo lineup** was only set for Sat 24 → Sun 25 Oct. Barbara wants to do Mondo set lists later. Note: her "8 Nov, Chris Stassy" date is actually Brunch Electronik x BSMT LIVE at The Lenovo Garage (17:00–00:00, with DJ Tennis and DLOU), not Mondo. Open question whether to add that as a third venue. To change a lineup, update `venues.lineup` (JSON `{name, start, end}` in ISO with offset; festivals add `stage`) with a small SQL file.
 4. **Halloween crews** expire 48 h after the event (`ends_at`). Mondo has no end date, so its crews don't auto-delete.
 5. **Ideas raised but not built:**
    - real Shazam and Apple Health, which need a native App Store app (taps and ratings are already logged in `feature_taps` and `feedback` to measure interest),
@@ -101,11 +109,13 @@ Plus two fixes she already ran: `supabase/fixes/2026-10-23_push_apikey.sql` and 
 - `components/DjDisplay.tsx`: DJ screen, lineup sheet (rendered over the tab bar) and Premium rating
 - `components/Penguin.tsx`: SVG penguin, accessories, signal badge; animations live in `styles.css`
 - `screens/Overlays.tsx`: profile sheet (modes, notifications, ghost, SOS)
-- `supabase/functions/push/index.ts`: who gets which notification
+- `lib/social.ts`: buddy groups (`shownDots`), invites, planned moves, faded suggestions, set plans (`planTimeline`, clashes, `normalizePlan`). Unit tests in `social.test.ts`
+- `components/Social.tsx`: buddy/move/next-set cards, Plan a move sheet, Let go sheet
+- `supabase/functions/push/index.ts`: who gets which notification (mutes, buddies, moves, reminders)
 - `supabase/tests/*.sql`: SQL tests (run on plain Postgres after `supabase_stub.sql` and all migrations)
 
 ## Testing approach used so far
 
 - `npx tsc -b`, `npx vitest run` (9 unit tests) and `npx vite build`.
-- A local stack (Postgres 16, PostgREST, a small Node shim for Supabase auth, storage and REST, and Deno for the push function) with Playwright scripts running two phones at once. Those scripts lived in the old session's temporary folder and aren't in the repo, so a new session would need to rebuild that stack to repeat them.
-- Last results: Halloween flow 38/38, Mondo flow 30+/30+, notification routing checked end to end with a fake push service.
+- The local stack and Playwright scripts are now in the repo: `tools/local-stack/` (see its README). Postgres 16 + PostgREST + a Node shim (auth, storage, realtime joins, pg_net and pg_cron stand-ins, fake HTTPS push service) + Deno running the real push function.
+- Last results (25 Oct evening): 23 unit tests, all SQL tests (new: `supabase/tests/buddies_plans.sql`), Halloween three-phone flow all passing (buddies, plans, reminders, moves, mute, notification routing), weak-signal timings above, and Mondo screens pixel-identical to the live version.

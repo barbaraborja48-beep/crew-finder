@@ -10,6 +10,7 @@ import { kv, outbox, type OutItem, type Table } from './db'
 import { compressPhoto } from './photo'
 import { pinned, nextCheckin, type Dot } from './rules'
 import { hasCloseUp, where, ME, STATUS, type Place, type PlaceType, type Venue } from './venue'
+import { groupOf, normalizePlan, shownDots, setKey, type DjSet, type Move, type MsgMeta, type PlanItem } from './social'
 
 // ─── types ────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ export interface Member {
   acc?: number // PinGü accessory, 0 = none
   net?: number | null // their signal, 0–3, as last reported
   saver?: boolean // data saver on
+  buddy?: string | null // buddy group id: everyone with the same one moves together
 }
 
 export interface Crew {
@@ -44,7 +46,7 @@ export interface Checkin extends Dot {
   created_at?: number // first tap at this spot (born moves forward when you extend)
 }
 
-export type MsgType = 'text' | 'photo' | 'loc' | 'sys' | 'sos' | 'status'
+export type MsgType = 'text' | 'photo' | 'loc' | 'sys' | 'sos' | 'status' | 'buddy' | 'move' | 'guess'
 export interface Message {
   id: string
   crew_id: string
@@ -56,8 +58,16 @@ export interface Message {
   nx: number | null
   ny: number | null
   born: number
-  to_member?: string | null // pings: who it's for
+  to_member?: string | null // pings, buddy requests, guesses: who it's about
+  meta?: MsgMeta | null // planned moves and let-go guesses
   localPhoto?: string // object URL while the upload waits
+}
+
+/** Things only you set: who you muted and your set plan. */
+export interface Prefs {
+  mutes: string[]
+  plan: PlanItem[]
+  plan_shared: boolean
 }
 
 export interface Preview {
@@ -95,7 +105,10 @@ export interface State {
   weakSignal: boolean // the signal looks bad: suggest low data mode
   live: boolean // good connection mode: the live connection is up
   photosShown: Record<string, true> // in low data mode, friends' photos load on tap
-  toast: { text: string; icon: string; fg: string; key: number; undo?: boolean } | null
+  prefs: Prefs
+  plans: Record<string, PlanItem[] | null> // friends' set plans, if they share them
+  answered: Record<string, true> // buddy requests you said yes or no to (this phone)
+  toast: { text: string; icon: string; fg: string; key: number; undo?: boolean; solo?: boolean } | null
   ui: {
     screen: Screen
     stage: string
@@ -133,6 +146,9 @@ const initial: State = {
   weakSignal: false,
   live: false,
   photosShown: {},
+  prefs: { mutes: [], plan: [], plan_shared: false },
+  plans: {},
+  answered: {},
   toast: null,
   ui: {
     screen: 'map',
@@ -212,6 +228,7 @@ const packMessage = (r: Row): Row => ({
   a: ageNow(r),
   b: ms(r.born as string),
   to: r.to_member || undefined,
+  m: r.meta || undefined,
 })
 
 interface SyncResponse {
@@ -220,7 +237,9 @@ interface SyncResponse {
   rejected: string[]
   members: Member[]
   checkins: [string, string, string, number, number, number, number, number, number][]
-  messages: [string, string, MsgType, string, string | null, string | null, number | null, number | null, number, string | null][]
+  messages: [string, string, MsgType, string, string | null, string | null, number | null, number | null, number, string | null, MsgMeta | null][]
+  prefs?: Prefs | null // yours, on a first sync
+  plans?: [string, PlanItem[] | null][] // friends' plans that changed (null = not shared)
   crew?: Crew
   venue?: Venue
   places?: Place[]
@@ -255,7 +274,7 @@ class Store {
     const p = typeof patch === 'function' ? patch(this.state) : patch
     this.state = { ...this.state, ...p }
     this.listeners.forEach(l => l())
-    if ('crew' in p || 'members' in p || 'checkins' in p || 'messages' in p || 'venue' in p || 'places' in p || 'ghostDot' in p) this.save()
+    if ('crew' in p || 'members' in p || 'checkins' in p || 'messages' in p || 'venue' in p || 'places' in p || 'ghostDot' in p || 'prefs' in p || 'plans' in p || 'answered' in p) this.save()
   }
   ui(patch: Partial<State['ui']>) {
     this.set(s => ({ ui: { ...s.ui, ...patch } }))
@@ -271,13 +290,13 @@ class Store {
     const s = this.state
     if (!s.session) return Promise.resolve()
     const msgs = Object.values(s.messages).map(withoutLocal)
-    return kv.set('snapshot', { session: s.session, venue: s.venue, places: s.places, crew: s.crew, members: s.members, checkins: s.checkins, messages: msgs, ghostDot: s.ghostDot })
+    return kv.set('snapshot', { session: s.session, venue: s.venue, places: s.places, crew: s.crew, members: s.members, checkins: s.checkins, messages: msgs, ghostDot: s.ghostDot, prefs: s.prefs, plans: s.plans, answered: s.answered })
   }
 
-  toast(text: string, icon = 'ph-bold ph-check', fg = ME, undo = false) {
+  toast(text: string, icon = 'ph-bold ph-check', fg = ME, undo = false, solo = false) {
     clearTimeout(this.toastTimer)
-    this.set({ toast: { text, icon, fg, key: Date.now(), undo } })
-    this.toastTimer = setTimeout(() => this.set({ toast: null }), undo ? 5000 : 2200)
+    this.set({ toast: { text, icon, fg, key: Date.now(), undo, solo } })
+    this.toastTimer = setTimeout(() => this.set({ toast: null }), undo || solo ? 5000 : 2200)
   }
 
   // ─── undo a pin (club maps pin on a single tap, so mis-taps happen) ─────
@@ -319,7 +338,7 @@ class Store {
     if (!configured) return this.set({ phase: 'unconfigured' })
 
     const invite = new URLSearchParams(location.search).get('crew')?.trim().toLowerCase() || null
-    type Snap = Pick<State, 'session' | 'venue' | 'places' | 'crew' | 'members' | 'checkins' | 'ghostDot'> & { messages: Message[] }
+    type Snap = Pick<State, 'session' | 'venue' | 'places' | 'crew' | 'members' | 'checkins' | 'ghostDot'> & Partial<Pick<State, 'prefs' | 'plans' | 'answered'>> & { messages: Message[] }
     const snap = await kv.get<Snap>('snapshot')
     const items = await outbox.all()
     const pending: Record<string, Sync> = {}
@@ -406,7 +425,7 @@ class Store {
   private async resetLocal() {
     await outbox.clear()
     await kv.clear()
-    this.set({ checkins: {}, messages: {}, members: [], crew: null, ghostDot: null, pending: {} })
+    this.set({ checkins: {}, messages: {}, members: [], crew: null, ghostDot: null, pending: {}, prefs: initial.prefs, plans: {}, answered: {} })
   }
 
   // ─── sync ─────────────────────────────────────────────────────────────
@@ -532,18 +551,21 @@ class Store {
     this.set({ syncing: true })
     let ok = false
     try {
-      await this.uploadPhotos()
+      // Pins and messages go first; photos (much bigger) only after, so a stuck photo
+      // can never hold up your pin.
       const items = (await outbox.all()).filter(i => !i.blob)
       items.forEach(i => this.setPending(i.id, 'sending'))
       const checkins: Row[] = []
       const messages: Row[] = []
       let me: Row | null = null
       let crew: Row | null = null
+      let prefs: Row | null = null
       for (const it of items) {
         if (it.table === 'checkins') checkins.push(packCheckin(it.row))
         else if (it.table === 'messages') messages.push(packMessage(it.row))
         else if (it.table === 'members') me = { ...(me ?? {}), ...it.row }
         else if (it.table === 'crews') crew = { ...(crew ?? {}), ...it.row }
+        else if (it.table === 'prefs') prefs = { ...(prefs ?? {}), ...it.row }
       }
       if (me) delete me.last_seen // the server stamps it
       const netSent = this.netToReport
@@ -558,6 +580,7 @@ class Store {
         p_messages: messages,
         p_me: me,
         p_crew: crew,
+        ...(prefs ? { p_prefs: prefs } : {}), // only when changed, so older databases still match
       })
       this.measureSignal(error && isTransient(error, status) ? null : performance.now() - t0)
       if (error && (error.code === 'PGRST202' || status === 404)) {
@@ -604,6 +627,8 @@ class Store {
       }
       if (r.places_hash) await kv.set('placesHash', r.places_hash)
       this.set({ signal: 'ok', lastSync: Date.now() })
+      void this.keepAuthFresh() // the signal is good right now: renew the login if it's due soon
+      void this.photoLane()
     } catch (e) {
       console.warn('sync failed', e)
       this.measureSignal(null)
@@ -612,14 +637,17 @@ class Store {
       this.syncing = false
       this.failStreak = ok ? 0 : this.failStreak + 1
       this.set({ syncing: false })
-      const left = (await outbox.all()).length
+      this.pauseLiveWhileStuck(ok)
+      const left = (await outbox.all()).filter(i => !i.blob).length // photos retry in their own lane
       if (this.syncAgain) {
         this.syncAgain = false
         this.queueSync(0)
       } else if (left) {
         // Something of yours still hasn't gone out: keep trying with tiny requests while the
-        // app is open, quickly at first (2 s, 4 s, 8 s), then every 15 s.
-        this.queueSync(ok ? 300 : Math.min(15_000, 2_000 * 2 ** Math.max(0, this.failStreak - 1)))
+        // app is open, quickly at first (1.5 s, 3 s, 6 s), then every 10 s.
+        this.queueSync(ok ? 300 : Math.min(10_000, 1_500 * 2 ** Math.max(0, this.failStreak - 1)))
+      } else if (!ok && (await outbox.all()).length) {
+        this.queueSync(Math.min(10_000, 1_500 * 2 ** Math.max(0, this.failStreak - 1))) // only photos left: get signal back first
       }
     }
   }
@@ -656,15 +684,19 @@ class Store {
       )
     if (r.messages.length)
       this.mergeMessages(
-        r.messages.map(([id, member_id, type, text, photo_url, place_id, nx, ny, born, to_member]) => ({
-          id, member_id, type, text, photo_url, place_id, nx: nx == null ? null : +nx, ny: ny == null ? null : +ny, born: fromServer(born), to_member, crew_id: crewId,
+        r.messages.map(([id, member_id, type, text, photo_url, place_id, nx, ny, born, to_member, meta]) => ({
+          id, member_id, type, text, photo_url, place_id, nx: nx == null ? null : +nx, ny: ny == null ? null : +ny, born: fromServer(born), to_member, meta: meta ?? null, crew_id: crewId,
         })),
       )
+    // Your own prefs come back on a first sync (a new phone); unsent changes here win.
+    if (r.prefs && !this.state.pending[this.prefsId()]) this.set({ prefs: { ...initial.prefs, ...r.prefs } })
+    if (r.plans?.length) this.set(s => ({ plans: { ...s.plans, ...Object.fromEntries(r.plans!) } }))
   }
 
   /** Pre-update fallback: send rows one by one, then pull the whole crew. */
   private async legacySync(items: OutItem[], crewId: string): Promise<boolean> {
     for (const it of items) {
+      if (it.table === 'prefs') continue // needs the newer database; waits for it
       const r = it.op === 'upsert' ? await supabase.from(it.table).upsert(it.row, { onConflict: 'id' }) : await supabase.from(it.table).update(it.row).eq('id', it.id)
       if (r.error && isTransient(r.error, r.status)) {
         items.forEach(i => this.setPending(i.id, 'queued'))
@@ -701,8 +733,52 @@ class Store {
     return true
   }
 
+  /**
+   * Good connection mode, but sends keep failing: drop the live connection until one gets
+   * through, so the little signal there is goes to your pin. (The 20 s check covers updates.)
+   */
+  private livePaused = false
+  private pauseLiveWhileStuck(ok: boolean) {
+    if (!ok && this.failStreak >= 2 && this.channel && !this.state.dataSaver) {
+      this.channel.unsubscribe()
+      this.channel = null
+      this.livePaused = true
+      this.set({ live: false })
+    } else if (ok && this.livePaused) {
+      this.livePaused = false
+      this.applyMode()
+    }
+  }
+
+  /** Logins last an hour. Renew while the signal is good, not on the first pin after it runs out. */
+  private async keepAuthFresh() {
+    try {
+      const { data } = await supabase.auth.getSession()
+      const exp = data.session?.expires_at
+      if (exp && exp * 1000 - Date.now() < 15 * 60_000) await supabase.auth.refreshSession()
+    } catch {
+      /* try again after the next sync */
+    }
+  }
+
   /** Photos go up on their own; once uploaded they become a normal message row in the next sync. */
+  /** Photos upload on their own, outside the sync, so the next pin never waits for one. */
+  private photoBusy = false
+  private async photoLane() {
+    if (this.photoBusy || !(await outbox.all()).some(i => i.blob)) return
+    this.photoBusy = true
+    try {
+      if (await this.uploadPhotos()) this.queueSync(0) // now a normal message row: send it
+      else if (this.photoStuck) setTimeout(() => void this.photoLane(), 10_000)
+    } finally {
+      this.photoBusy = false
+    }
+  }
+
+  private photoStuck = false
   private async uploadPhotos() {
+    let sent = 0
+    this.photoStuck = false
     for (const it of (await outbox.all()).filter(i => i.blob)) {
       this.setPending(it.id, 'sending')
       const path = `${this.state.session!.crewId}/${it.id}.jpg`
@@ -714,7 +790,8 @@ class Store {
           this.setPending(it.id, 'queued')
           if (isTransient(e, e.status)) {
             this.set(s => ({ photoFailed: { ...s.photoFailed, [it.id]: true } }))
-            return // weak signal: try photos again next round, text keeps flowing
+            this.photoStuck = true
+            return sent // weak signal: try photos again next round, text keeps flowing
           }
           await outbox.del(it.key)
           this.toast('Couldn’t send that photo', 'ph ph-warning', '#ff7a92')
@@ -725,7 +802,9 @@ class Store {
       const cur = (await outbox.get(it.key)) ?? it
       await outbox.put({ ...cur, blob: undefined, row: { ...cur.row, photo_url: url }, v: Math.random() })
       this.set(s => ({ messages: { ...s.messages, [it.id]: { ...s.messages[it.id], photo_url: url } } }))
+      sent++
     }
+    return sent
   }
 
   // Server rows win, except rows we still have queued locally (ours are newer).
@@ -792,6 +871,23 @@ class Store {
     if (this.ghost() && s.ghostDot) return s.ghostDot
     return latestDots(s.checkins).get(s.session?.memberId ?? '') ?? null
   }
+  /** Where your penguin is shown: your own pin, or your buddy group's newest one. */
+  myShownDot(): Checkin | null {
+    const s = this.state
+    if (this.ghost()) return this.myDot()
+    const id = s.session?.memberId ?? ''
+    return shownDots(latestDots(s.checkins), s.members).get(id)?.dot ?? null
+  }
+  /** Your buddies (not you), if you're in a group. */
+  buddies(): Member[] {
+    const s = this.state
+    const id = s.session?.memberId ?? ''
+    const ids = groupOf(s.members, id).filter(x => x !== id)
+    return s.members.filter(m => ids.includes(m.id))
+  }
+  private prefsId() {
+    return `prefs-${this.state.session?.memberId ?? ''}`
+  }
   /** Live-or-not latest dot per visible friend, with their member row. */
   friendDots() {
     const s = this.state
@@ -828,8 +924,11 @@ class Store {
     this.set({ checkins: { ...s.checkins, [row.id]: row } })
     this.enqueue('checkins', 'upsert', row.id, checkinRow(row))
     this.updateMe({ last_seen: iso(now) }, true)
-    if (s.signal === 'none') this.toast(`${msg} · queued, sends with signal`, 'ph ph-clock', '#ffd97a', undoable)
-    else this.toast(msg, undefined, undefined, undoable)
+    // Buddied up: everyone moves with you. "Just me" in the message lets you go on your own.
+    const buddies = this.buddies()
+    const text = buddies.length && !merged ? `Pinned you + ${buddies.map(b => b.name).join(', ')} · ${where(this.place(placeId), dot.nx, dot.ny)}` : msg
+    if (s.signal === 'none') this.toast(`${text} · queued, sends with signal`, 'ph ph-clock', '#ffd97a', undoable, buddies.length > 0 && !merged)
+    else this.toast(text, buddies.length ? 'ph-bold ph-users-three' : undefined, undefined, undoable, buddies.length > 0 && !merged)
   }
 
   /** Change your own member row (status, note, ghost…). */
@@ -942,7 +1041,8 @@ class Store {
   }
 
   openFromNotification(open: string, member?: string | null) {
-    if (open === 'chat') this.ui({ screen: 'chat', sheet: false, sos: false })
+    if (open === 'stage' && member) this.ui({ screen: 'stage', stage: member, sheet: false, sos: false })
+    else if (open === 'chat') this.ui({ screen: 'chat', sheet: false, sos: false })
     else if (open === 'find' && member) this.ui({ screen: 'find', findId: member, sheet: false, sos: false })
     else if (open === 'crew') this.ui({ screen: 'crew', sheet: false, sos: false })
     else this.ui({ screen: 'map', sheet: false, sos: false })
@@ -959,6 +1059,118 @@ class Store {
     this.addMessage({ type: 'status', text: `${STATUS[me.status]?.[1] ?? 'Vibing'}${me.note ? ` · “${me.note}”` : ''}` })
   }
 
+  // ─── mute ─────────────────────────────────────────────────────────────
+
+  /** No pin, chat or ping notifications from this person (SOS and the meet spot still come through). */
+  setMuted(memberId: string, on: boolean) {
+    const mutes = on ? [...new Set([...this.state.prefs.mutes, memberId])] : this.state.prefs.mutes.filter(id => id !== memberId)
+    this.setPrefs({ mutes })
+    const name = this.state.members.find(m => m.id === memberId)?.name ?? ''
+    this.toast(on ? `${name} muted · SOS still comes through` : `${name} unmuted`, on ? 'ph ph-bell-slash' : 'ph ph-bell')
+  }
+
+  private setPrefs(patch: Partial<Prefs>) {
+    const id = this.prefsId()
+    this.set(s => ({ prefs: { ...s.prefs, ...patch } }))
+    this.enqueue('prefs', 'update', id, patch as Row)
+  }
+
+  // ─── buddies ──────────────────────────────────────────────────────────
+
+  /** Ask someone to buddy up. You start the group (if you're not in one) and they join it. */
+  buddyUp(member: Member) {
+    const me = this.me()
+    if (!me) return
+    if (!me.buddy) this.updateMe({ buddy: me.id })
+    this.addMessage({ type: 'buddy', text: `asked ${member.name} to buddy up`, to_member: member.id })
+    this.toast(`Asked ${member.name} to buddy up`, 'ph ph-users-three', member.color)
+  }
+
+  acceptBuddy(invite: Message) {
+    const from = this.state.members.find(m => m.id === invite.member_id)
+    if (!from) return
+    this.set(s => ({ answered: { ...s.answered, [invite.id]: true } }))
+    this.updateMe({ buddy: from.buddy ?? from.id })
+    this.addMessage({ type: 'status', text: `buddied up with ${from.name}` })
+    this.toast(`You and ${from.name} move together now`, 'ph-bold ph-users-three', from.color)
+  }
+
+  declineBuddy(invite: Message) {
+    this.set(s => ({ answered: { ...s.answered, [invite.id]: true } }))
+  }
+
+  /** Leave your buddy group. Your pin stays yours; the others go back to theirs. */
+  goSolo() {
+    const names = this.buddies().map(b => b.name)
+    if (!this.me()?.buddy) return
+    this.updateMe({ buddy: null })
+    this.addMessage({ type: 'status', text: names.length ? `split off from ${names.join(', ')}` : 'went solo' })
+    this.toast('Just you now', 'ph ph-person-simple-walk')
+  }
+
+  /** A buddy wandered off: let them out of the group, and say where you think they went. */
+  letGo(member: Member, placeId: string | null) {
+    const p = this.place(placeId)
+    this.set(s => ({ members: s.members.map(m => (m.id === member.id ? { ...m, buddy: null } : m)) }))
+    this.addMessage({
+      type: 'guess',
+      text: p ? `thinks ${member.name} went to ${placeTitleShort(p)}` : `let ${member.name} go`,
+      to_member: member.id,
+      place_id: p?.id ?? null,
+      nx: p ? 0.5 : null,
+      ny: p ? 0.5 : null,
+      meta: { letgo: true },
+    })
+    this.toast(p ? `${member.name}: probably at ${placeTitleShort(p)}` : `Let ${member.name} go`, 'ph ph-person-simple-walk', member.color)
+  }
+
+  // ─── planned moves ────────────────────────────────────────────────────
+
+  /** "Going to the WC in 10 min": tells them now, reminds everyone when it's time. */
+  planMove(placeId: string, withIds: string[], mins: number) {
+    const p = this.place(placeId)
+    if (!p || !withIds.length) return
+    const j = () => 0.5 + (Math.random() - 0.5) * 0.3
+    const spot = placeTitleShort(p)
+    this.addMessage({ type: 'move', text: mins ? `going to ${spot} in ${mins} min` : `going to ${spot} now`, place_id: p.id, nx: j(), ny: j(), meta: { in: mins, with: withIds } })
+    const names = this.state.members.filter(m => withIds.includes(m.id)).map(m => m.name).join(', ')
+    this.toast(mins ? `${spot} in ${mins} min · told ${names}` : `Meet ${names} at ${spot}`, 'ph-bold ph-path')
+  }
+  cancelMove(mv: Move) {
+    this.addMessage({ type: 'move', text: 'cancelled the move', meta: { cancel: mv.id } })
+  }
+  declineMove(mv: Move) {
+    this.addMessage({ type: 'move', text: `can’t make it to ${placeTitleShort(this.place(mv.placeId))}`, meta: { decline: mv.id } })
+  }
+  /** I'm there: pin me at the spot (the faded penguin becomes the real one). */
+  confirmMove(mv: Move) {
+    this.checkIn(mv.placeId, mv.nx, mv.ny, true)
+  }
+
+  // ─── set plan ─────────────────────────────────────────────────────────
+
+  togglePick(set: DjSet) {
+    const k = setKey(set)
+    const plan = this.state.prefs.plan
+    const on = plan.some(i => i.k === k)
+    this.setPlan(on ? plan.filter(i => i.k !== k) : [...plan, { k, r: loadReminder() }])
+    if (!on) this.toast(`${set.name} added to your night`, 'ph-fill ph-star', '#ffc83b')
+  }
+  setReminder(k: string, r: number | null) {
+    saveReminder(r)
+    this.setPrefs({ plan: this.state.prefs.plan.map(i => (i.k === k ? { ...i, r } : i)) })
+  }
+  setSwitch(k: string, at: number) {
+    this.setPlan(this.state.prefs.plan.map(i => (i.k !== k ? i : { ...i, f: new Date(at).toISOString() })))
+  }
+  private setPlan(plan: PlanItem[]) {
+    this.setPrefs({ plan: normalizePlan(plan, (this.state.venue?.lineup ?? []) as DjSet[]) })
+  }
+  setPlanShared(on: boolean) {
+    this.setPrefs({ plan_shared: on })
+    this.toast(on ? 'Your crew can see your plan on your profile' : 'Your plan is just for you', on ? 'ph ph-eye' : 'ph ph-eye-slash')
+  }
+
   /** Jump to wherever a place lives: stages open the floor, areas open their card. */
   openPlace(id: string | null) {
     const p = this.place(id)
@@ -966,6 +1178,27 @@ class Store {
     const floor = p.floor ? { floor: p.floor } : {}
     if (hasCloseUp(p)) this.ui({ screen: 'stage', stage: p.id, areaSel: null, ...floor })
     else this.ui({ screen: 'map', areaSel: p.id, types: { ...this.state.ui.types, [p.type]: true }, ...floor })
+  }
+}
+
+/** "WC · Salida", "Brunch!": somewhere to head to. */
+export const placeTitleShort = (p: Place | undefined) => (!p ? 'the spot' : p.type !== 'stage' && p.near ? `${p.name} · ${p.near}` : p.name)
+
+// The reminder you picked last time is the default for the next set you star.
+const REMIND_KEY = 'pingu-remind'
+function loadReminder(): number | null {
+  try {
+    const v = localStorage.getItem(REMIND_KEY)
+    return v == null ? 10 : v === 'off' ? null : +v
+  } catch {
+    return 10
+  }
+}
+function saveReminder(r: number | null) {
+  try {
+    localStorage.setItem(REMIND_KEY, r == null ? 'off' : String(r))
+  } catch {
+    /* private mode */
   }
 }
 

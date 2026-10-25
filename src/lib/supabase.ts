@@ -7,9 +7,14 @@ export const configured = !!url && !!key
 export const SUPABASE_URL = url ?? ''
 export const SUPABASE_ANON_KEY = key ?? ''
 
-// With one bar of signal a request can hang for minutes. Give up after 20 s
-// and let the outbox retry instead.
-const timedFetch: typeof fetch = (input, init) => fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(20_000) })
+// With one bar of signal a request can hang for minutes. A sync is a few hundred bytes, so
+// if it hasn't come back in 10 s it's stuck: give up and let the outbox retry right away
+// (a fresh try often gets through where the stuck one never would). Photos get longer.
+const timedFetch: typeof fetch = (input, init) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const limit = url.includes('/storage/v1/') ? 30_000 : 10_000
+  return fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(limit) })
+}
 
 export const supabase = createClient(url || 'http://localhost:54321', key || 'missing', {
   global: { fetch: timedFetch },

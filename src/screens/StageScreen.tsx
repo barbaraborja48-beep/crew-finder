@@ -3,12 +3,14 @@ import { store, useStore } from '../lib/store'
 import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
 import { agoLong, CORNER, hasCloseUp, isLine, placeTitle, rowDip, TYPES, where, type Place, type PlaceType, type SquareShape } from '../lib/venue'
 import { DjDisplay, DjSheet } from '../components/DjDisplay'
-import { useNow, mySync, crewRows, statusOf } from '../lib/view'
+import { useNow, mySync, crewRows, statusOf, myHuddle, suggested } from '../lib/view'
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
 import { Penguin } from '../components/Penguin'
 import { activityFor } from '../lib/penguin'
 
 const W = 362
+/** Buddies on one pin stand side by side on the close-up, a name's width apart. */
+const huddleX = (h: { i: number; n: number }) => (h.n > 1 ? (h.i - (h.n - 1) / 2) * 46 : 0)
 const GROUPS: PlaceType[] = ['stage', 'bar', 'food', 'picnic']
 
 /** Close-up floor size: stages are tall, bars and trucks are wide and shallow. */
@@ -196,7 +198,7 @@ export function StageScreen() {
   const closeUps = s.places.filter(hasCloseUp)
   const place = closeUps.find(p => p.id === s.ui.stage) ?? closeUps.find(p => p.type === 'stage')
   const rows = crewRows(s, now)
-  const mine = store.myDot()
+  const mine = store.myShownDot() // with your buddies, if you're in a group
   const meLive = pinned(mine, now)
   const me = store.me()
   const sync = mySync(s, now)
@@ -205,7 +207,9 @@ export function StageScreen() {
   // Club dance floors (Mondo) get the crowd's-eye layout with the DJ screen on top.
   const sq = place.shape?.kind === 'square' ? place.shape : null
   const H = sq && fitH ? Math.min(760, Math.max(330, fitH)) : floorHeight(place)
-  const lineup = s.venue?.lineup ?? []
+  // Festival lineups name each set's stage; a club's single lineup belongs to its dance floor.
+  const lineup = (s.venue?.lineup ?? []).filter(x => (x.stage ? x.stage === place.id : !!sq))
+  const festivalDj = !sq && place.type === 'stage' && lineup.length > 0
   const toX = (nx: number) => nx * W
   const toY = (ny: number) => ny * H
   const maxLen = Math.max(1, ...s.places.map(p => (p.shape && isLine(p.shape) && p.shape.kind === 'counter' ? p.shape.len : 0)))
@@ -304,6 +308,11 @@ export function StageScreen() {
             <SideTile id="m-balcon" icon="ph ph-stairs" label="I’m upstairs" places={s.places} />
           </div>
         )}
+        {festivalDj && (
+          <div style={{ marginBottom: 6 }}>
+            <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} />
+          </div>
+        )}
         {place.type === 'stage' && !(sq && lineup.length > 0) && (
           <div style={{ height: 28, borderRadius: 'var(--radius-md) var(--radius-md) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10, letterSpacing: '.16em', color: 'var(--color-accent-200)', background: 'linear-gradient(180deg, var(--color-accent-800), transparent)', borderBottom: '1.5px solid var(--color-accent-300)', boxShadow: '0 6px 24px -10px var(--color-accent)' }}>
             <i aria-hidden className="ph ph-speaker-hifi" />
@@ -319,6 +328,18 @@ export function StageScreen() {
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: 'linear-gradient(var(--color-neutral-900) 1px, transparent 1px), linear-gradient(90deg, var(--color-neutral-900) 1px, transparent 1px)', backgroundSize: '22px 22px', opacity: 0.55 }} />
             {sq ? <ClubFloor sh={sq} h={H} places={s.places} /> : <FloorArt p={place} h={H} maxLen={maxLen} />}
 
+            {suggested(s, now).filter(sg => sg.placeId === place.id).map((sg, i) => {
+              // Faded: where someone's probably heading (a planned move, or a friend's guess).
+              const m = s.members.find(x => x.id === sg.memberId)
+              if (!m || m.ghost) return null
+              return (
+                <div key={'s' + m.id} style={{ position: 'absolute', left: toX(sg.nx) + (i - 0.5) * 46, top: toY(sg.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.5, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Penguin color={m.color} acc={m.acc ?? 0} activity="walk" seed={m.id} size={30} glow={0.3} />
+                  <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>{m.id === me?.id ? 'You' : m.name}?</span>
+                </div>
+              )
+            })}
+
             {here.map(r => {
               const d = r.dot!
               const f = fraction(d, now)
@@ -331,7 +352,7 @@ export function StageScreen() {
                     e.stopPropagation()
                     store.ui({ findId: r.member.id, screen: 'find' })
                   }}
-                  style={{ position: 'absolute', left: toX(d.nx), top: toY(d.ny), transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                  style={{ position: 'absolute', left: toX(d.nx) + huddleX(r.huddle), top: toY(d.ny), transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                 >
                   <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(place.type, r.member.status, r.fresh)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
@@ -345,7 +366,7 @@ export function StageScreen() {
               const f = fraction(mine!, now)
               const size = 32 + Math.min(4, mine!.taps - 1) * 4
               return (
-                <div style={{ position: 'absolute', left: toX(mine!.nx), top: toY(mine!.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', left: toX(mine!.nx) + huddleX(me.ghost ? { i: 0, n: 1 } : myHuddle(s)), top: toY(mine!.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(place.type, me.status, fresh(mine, now))} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
                     You
@@ -385,7 +406,7 @@ export function StageScreen() {
           <SmsFallback />
         </div>
       </div>
-      {djOpen && <DjSheet sets={lineup} now={now} onClose={() => setDjOpen(false)} />}
+      {djOpen && <DjSheet sets={lineup} now={now} onClose={() => setDjOpen(false)} stage={festivalDj ? place.id : undefined} />}
     </div>
   )
 }

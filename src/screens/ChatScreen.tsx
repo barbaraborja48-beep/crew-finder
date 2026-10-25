@@ -109,6 +109,16 @@ export function ChatScreen() {
               </div>
             )
           }
+          if (m.type === 'buddy' || m.type === 'move' || m.type === 'guess') {
+            // Buddy requests, planned moves and let-go guesses: one quiet line each.
+            const icon = m.type === 'buddy' ? 'ph-bold ph-users-three' : m.type === 'move' ? 'ph-bold ph-path' : 'ph ph-person-simple-walk'
+            return (
+              <button key={m.id} onClick={() => m.place_id && store.openPlace(m.place_id)} style={{ ...sysLine, border: 0, background: 'transparent', cursor: m.place_id ? 'pointer' : 'default' }}>
+                <i aria-hidden className={icon} style={{ color }} />
+                {nameOf(m.member_id)} {m.text} · {stamp(m.born, now)}
+              </button>
+            )
+          }
           if (m.type === 'sos') {
             return (
               <button key={m.id} onClick={() => store.openPlace(m.place_id)} style={{ alignSelf: 'stretch', border: 0, cursor: 'pointer', borderRadius: 18, padding: '12px 14px', textAlign: 'left', background: 'color-mix(in srgb, #ff3b5c 12%, var(--color-surface))', boxShadow: 'inset 0 0 0 1px var(--sos-line)', color: 'var(--color-text)', display: 'flex', gap: 10, alignItems: 'center' }}>

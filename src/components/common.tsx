@@ -92,6 +92,11 @@ export function Toast() {
     <div key={toast.key} className="toast" role="status">
       <i aria-hidden className={toast.icon} style={{ color: toast.fg }} />
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.text}</span>
+      {toast.solo && (
+        <button onClick={() => store.goSolo()} style={{ border: 0, background: 'transparent', color: 'var(--color-accent-300)', font: '600 12px var(--font-body)', padding: '0 0 0 6px', cursor: 'pointer', flex: 'none', whiteSpace: 'nowrap' }}>
+          Just me
+        </button>
+      )}
       {toast.undo && (
         <button onClick={() => store.undoPin()} style={{ border: 0, background: 'transparent', color: 'var(--color-accent-300)', font: '600 12px var(--font-body)', padding: '0 0 0 6px', cursor: 'pointer', flex: 'none' }}>
           Undo

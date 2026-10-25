@@ -6,6 +6,7 @@ import { useNow } from '../lib/view'
 import { smsHref, sosSms } from '../lib/sms'
 import { Avatar, Toggle } from '../components/common'
 import { PenguinPicker } from '../components/PenguinPicker'
+import { DjSheet } from '../components/DjDisplay'
 import { disablePush, enablePush, loadPrefs, pushState, updatePrefs, type PushPrefs, type PushState } from '../lib/push'
 
 /** Your profile: name, color, status, note, ghost, notifications, SOS. */
@@ -22,6 +23,7 @@ export function ProfileSheet() {
   const [prefs, setPrefs] = useState<PushPrefs>(loadPrefs)
   const [pushBusy, setPushBusy] = useState(false)
   const [pushErr, setPushErr] = useState('')
+  const [night, setNight] = useState(false)
 
   useEffect(() => {
     if (s.ui.sheet) pushState().then(setPush)
@@ -103,6 +105,21 @@ export function ProfileSheet() {
           <input value={note} maxLength={40} onChange={e => setNote(e.target.value)} placeholder="Note for the crew" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--color-text)', font: '400 13px var(--font-body)' }} />
           <span style={{ fontSize: 10, color: 'var(--color-neutral-600)' }}>{40 - note.length}</span>
         </div>
+
+        {(s.venue?.lineup ?? []).some(x => x.stage) && (
+          // Festivals: your starred sets, reminders and whether the crew can see them.
+          <button onClick={() => setNight(true)} style={{ border: 0, cursor: 'pointer', background: 'transparent', padding: 0, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', color: 'var(--color-text)' }}>
+            <i aria-hidden className="ph-fill ph-star" style={{ fontSize: 18, color: '#ffc83b' }} />
+            <span style={{ flex: 1, fontSize: 14 }}>
+              My night
+              <span style={{ display: 'block', ...label }}>
+                {s.prefs.plan.length ? `${s.prefs.plan.length} set${s.prefs.plan.length > 1 ? 's' : ''} picked · ${s.prefs.plan_shared ? 'shared with the crew' : 'just for you'}` : 'Star the sets you want to see and get reminders'}
+              </span>
+            </span>
+            <i aria-hidden className="ph ph-caret-right" style={{ color: 'var(--color-neutral-500)' }} />
+          </button>
+        )}
+        {night && <DjSheet sets={[]} now={now} stage={s.places.find(p => p.type === 'stage')?.id} startTab="plan" onClose={() => setNight(false)} />}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <i aria-hidden className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />

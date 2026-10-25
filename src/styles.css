@@ -371,3 +371,16 @@ a { color: var(--color-accent-300); }
 .dj-dots i.on { width: 18px; background: #fff; }
 @container (max-width: 260px) { .dj-day { display: none; } .dj-kicker { letter-spacing: .1em; } .dj-time { font-size: 13px; } }
 @media (prefers-reduced-motion: reduce) { .lava i { animation: none !important; } }
+
+/* ─── Festival lineup: stage tabs, stars, reminders, clashes ─────────── */
+.dj-tabs { position: relative; z-index: 2; display: flex; gap: 6px; overflow-x: auto; padding: 0 18px 12px; }
+.dj-tabs button { flex: none; height: 30px; border: 0; cursor: pointer; padding: 0 12px; border-radius: 999px; font: 500 12px var(--font-body); background: rgba(0, 0, 0, .35); color: rgba(255, 255, 255, .75); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .15); display: flex; align-items: center; gap: 5px; }
+.dj-tabs button.on { background: rgba(255, 255, 255, .92); color: #000; }
+.dj-star { flex: none; width: 38px; height: 38px; border: 0; cursor: pointer; border-radius: 50%; background: rgba(0, 0, 0, .3); color: rgba(255, 255, 255, .6); font-size: 20px; display: grid; place-items: center; }
+.dj-star[aria-pressed='true'] { color: #ffc83b; filter: drop-shadow(0 0 6px #ffc83b); }
+.dj-remind { margin-top: 6px; border: 0; cursor: pointer; padding: 3px 9px; border-radius: 999px; background: rgba(255, 200, 59, .14); color: #ffd97a; font: 500 11px var(--font-body); display: inline-flex; align-items: center; gap: 5px; }
+.dj-remind-opts { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.dj-remind-opts button { border: 0; cursor: pointer; padding: 5px 10px; border-radius: 999px; background: rgba(0, 0, 0, .4); color: #fff; font: 500 11px var(--font-body); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .2); }
+.dj-remind-opts button.on { background: #ffc83b; color: #000; box-shadow: none; }
+.dj-clash { display: flex; align-items: center; gap: 8px; margin: 0 6px 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255, 59, 92, .16); box-shadow: inset 0 0 0 1px rgba(255, 92, 122, .5); font: 500 12px var(--font-body); color: #ffb3c1; }
+.dj-clash select { border: 0; border-radius: 8px; padding: 4px 6px; background: rgba(0, 0, 0, .5); color: #fff; font: 600 12px var(--font-body); }

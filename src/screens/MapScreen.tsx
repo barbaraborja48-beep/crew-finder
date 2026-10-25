@@ -1,7 +1,7 @@
 import { store, useStore } from '../lib/store'
 import { fresh, pinned } from '../lib/rules'
 import { floorView, hasCloseUp, mapPos, onFloor, outline, placeAt, toMap, TYPES, MAP_W, MAP_H, type Place, type PlaceType, type Venue } from '../lib/venue'
-import { useNow, mySync, crewRows, statusOf, ageLabel, type CrewRow } from '../lib/view'
+import { useNow, mySync, crewRows, statusOf, ageLabel, myHuddle, suggested, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
 import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill, WeakSignalHint } from '../components/common'
 import { ZoomPan } from '../components/ZoomPan'
@@ -9,6 +9,9 @@ import { Penguin } from '../components/Penguin'
 import { activityFor, type Activity } from '../lib/penguin'
 import { fraction } from '../lib/rules'
 import type { State } from '../lib/store'
+import { SocialBanners } from '../components/Social'
+import { lineupState } from '../components/DjDisplay'
+import type { DjSet } from '../lib/social'
 
 export function MapScreen() {
   const s = useStore()
@@ -19,8 +22,9 @@ export function MapScreen() {
   const v = s.venue && floorView(s.venue, ui.floor)
   const sync = mySync(s, now)
   const rows = crewRows(s, now)
-  const mine = store.myDot()
+  const mine = store.myShownDot() // with your buddies, if you're in a group
   const meLive = pinned(mine, now)
+  const lineup = (s.venue?.lineup ?? []) as DjSet[]
   // Every type shows unless switched off. Open areas start hidden on the big festival map
   // (too many), but on a club map the balcony and entrances are the landmarks.
   const isOn = (k: PlaceType) => ui.types[k] ?? (k !== 'open' || floors.length > 0)
@@ -219,8 +223,13 @@ export function MapScreen() {
                           onClick={() => store.ui({ stage: st.id, screen: 'stage' })}
                           style={{ position: 'absolute', left: p.x, top: p.y, transform: 'translate(-50%,-50%)', width: 46, height: 46, border: 0, cursor: 'pointer', borderRadius: '50%', padding: 0, background: 'transparent', boxShadow: `inset 0 0 0 ${inv}px color-mix(in srgb, var(--color-accent-300) 55%, transparent)` }}
                         />
-                        <div style={{ position: 'absolute', left: p.x, top: p.y + 23, transform: `translateX(-50%) scale(${inv})`, transformOrigin: '50% 0', pointerEvents: 'none', fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 999, background: 'rgba(0,0,0,.72)', color: '#fff', boxShadow: 'var(--shadow-sm)' }}>
+                        <div style={{ position: 'absolute', left: p.x, top: p.y + 23, transform: `translateX(-50%) scale(${inv})`, transformOrigin: '50% 0', pointerEvents: 'none', fontSize: 10, fontWeight: 500, whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 999, background: 'rgba(0,0,0,.72)', color: '#fff', boxShadow: 'var(--shadow-sm)', textAlign: 'center' }}>
                           {st.name}
+                          {(() => {
+                            // Festival stages: who's playing right now, small, under the name.
+                            const cur = lineupState(lineup.filter(x => x.stage === st.id), now).current
+                            return cur && <span style={{ display: 'block', fontSize: 8, fontWeight: 400, color: 'var(--color-accent-200)', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>▶ {cur.name}</span>
+                          })()}
                         </div>
                       </div>
                     )
@@ -245,13 +254,18 @@ export function MapScreen() {
                       </button>
                     )
                   })}
+                {huddles(penguins).map(h => (
+                  // Buddies standing together: a soft glow under the huddle.
+                  <div key={h.key} style={{ position: 'absolute', left: h.x, top: h.y, width: h.w + 16, height: 10, transform: `translate(-50%, -50%) scale(${grow})`, borderRadius: '50%', background: 'radial-gradient(closest-side, color-mix(in srgb, var(--color-accent) 45%, transparent), transparent)', pointerEvents: 'none', zIndex: 3 }} />
+                ))}
                 {penguins.map(pg => (
                   <button
                     key={pg.key}
                     aria-label={pg.mine ? 'You' : pg.name}
-                    onClick={() => (pg.mine ? store.ui({ sheet: true }) : store.ui({ findId: pg.key, screen: 'find' }))}
-                    style={{ position: 'absolute', left: pg.x, top: pg.y, zIndex: 4, border: 0, padding: 0, background: 'transparent', cursor: 'pointer', transform: `translate(-50%, -88%) scale(${grow})`, transformOrigin: '50% 88%' }}
+                    onClick={() => (pg.mine ? store.ui({ sheet: true }) : store.ui({ findId: pg.member, screen: 'find' }))}
+                    style={{ position: 'absolute', left: pg.x, top: pg.y, zIndex: pg.suggest ? 3 : 4, border: 0, padding: 0, background: 'transparent', cursor: 'pointer', transform: `translate(-50%, -88%) scale(${grow})`, transformOrigin: '50% 88%', opacity: pg.suggest ? 0.5 : 1, filter: pg.suggest ? 'saturate(.6)' : undefined }}
                   >
+                    {pg.suggest && <span style={{ position: 'absolute', left: '50%', bottom: '4%', width: 20, height: 8, transform: 'translateX(-50%)', borderRadius: '50%', border: `1px dashed ${pg.color}` }} />}
                     <Penguin color={pg.color} acc={pg.acc} activity={pg.activity} seed={pg.key} size={18} glow={pg.glow} signal={pg.signal} saver={pg.saver} queued={pg.queued} />
                     <span
                       style={{
@@ -262,6 +276,7 @@ export function MapScreen() {
                       }}
                     >
                       {pg.mine ? 'You' : pg.name}
+                      {pg.suggest ? '?' : ''}
                     </span>
                   </button>
                 ))}
@@ -278,6 +293,7 @@ export function MapScreen() {
         </div>
         <WeakSignalHint />
         <SmsFallback />
+        <SocialBanners />
         {rows.length === 0 && (
           <div style={{ padding: '18px 0', fontSize: 13, color: 'var(--color-neutral-500)', textAlign: 'center' }}>
             Nobody else here yet. Invite your crew from the Crew tab.
@@ -293,7 +309,11 @@ export function MapScreen() {
               <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={30} />
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 500 }}>{r.member.name}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 14, fontWeight: 500 }}>
+                {r.member.name}
+                {r.buddies.includes(s.session?.memberId ?? '') && <i aria-hidden className="ph-bold ph-link" title="Buddied with you" style={{ fontSize: 11, color: 'var(--color-accent-300)' }} />}
+                {r.muted && <i aria-hidden className="ph ph-bell-slash" title="Muted" style={{ fontSize: 11, color: 'var(--color-neutral-500)' }} />}
+              </span>
               <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{r.where}</span>
             </span>
             <i aria-hidden className={r.member.ghost ? 'ph ph-ghost' : statusOf(r.member)[0]} style={{ color: 'var(--color-neutral-400)', fontSize: 15 }} />
@@ -341,6 +361,7 @@ export function MapScreen() {
 
 interface MapPenguin {
   key: string
+  member: string
   name: string
   mine: boolean
   x: number
@@ -353,7 +374,22 @@ interface MapPenguin {
   signal: number | null
   saver: boolean
   queued: boolean
+  suggest?: boolean // faded: a planned move or a guess, not a pin
+  group?: string // the pin a buddy huddle shares
 }
+
+/** Buddy huddles on this floor: where to draw the glow under them. */
+function huddles(pgs: MapPenguin[]) {
+  const by = new Map<string, MapPenguin[]>()
+  for (const p of pgs) if (p.group) by.set(p.group, [...(by.get(p.group) ?? []), p])
+  return [...by.entries()].filter(([, g]) => g.length > 1).map(([key, g]) => {
+    const xs = g.map(p => p.x)
+    return { key, x: (Math.min(...xs) + Math.max(...xs)) / 2, y: g[0].y, w: Math.max(...xs) - Math.min(...xs) }
+  })
+}
+
+/** Buddies on one pin stand side by side, 11 px apart. */
+const spread = (h: { i: number; n: number }) => (h.n > 1 ? (h.i - (h.n - 1) / 2) * 11 : 0)
 
 /** Everyone's penguin on the overview map (yours too), sorted back to front. */
 function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number, floor: number): MapPenguin[] {
@@ -363,19 +399,33 @@ function mapPenguins(s: State, v: Venue, rows: CrewRow[], now: number, floor: nu
     if (!r.dot || !pl || !r.live || !onFloor(pl, floor)) continue
     const p = mapPos(v, pl, r.dot.nx, r.dot.ny)
     out.push({
-      key: r.member.id, name: r.member.name, mine: false, ...p, color: r.member.color, acc: r.member.acc ?? 0,
+      key: r.member.id, member: r.member.id, name: r.member.name, mine: false, x: p.x + spread(r.huddle), y: p.y, color: r.member.color, acc: r.member.acc ?? 0,
       activity: activityFor(pl.type, r.member.status, r.fresh), live: r.fresh, glow: fraction(r.dot, now),
-      signal: r.member.net ?? null, saver: !!r.member.saver, queued: false,
+      signal: r.member.net ?? null, saver: !!r.member.saver, queued: false, group: r.huddle.n > 1 ? r.dot.id : undefined,
     })
   }
   const me = store.me()
-  const mine = store.myDot()
+  const mine = store.myShownDot()
   const pl = mine && store.place(mine.place_id)
   if (me && mine && pl && pinned(mine, now) && onFloor(pl, floor)) {
+    const p = mapPos(v, pl, mine.nx, mine.ny)
+    const h = me.ghost ? { i: 0, n: 1 } : myHuddle(s)
     out.push({
-      key: me.id, name: me.name, mine: true, ...mapPos(v, pl, mine.nx, mine.ny), color: me.color, acc: me.acc ?? 0,
+      key: me.id, member: me.id, name: me.name, mine: true, x: p.x + spread(h), y: p.y, color: me.color, acc: me.acc ?? 0,
       activity: activityFor(pl.type, me.status, fresh(mine, now)), live: fresh(mine, now), glow: fraction(mine, now),
-      signal: s.myNet, saver: s.dataSaver, queued: !!s.pending[mine.id] || me.ghost,
+      signal: s.myNet, saver: s.dataSaver, queued: !!s.pending[mine.id] || me.ghost, group: h.n > 1 ? mine.id : undefined,
+    })
+  }
+  // Where people are probably heading: a planned move that's due, or a friend's guess.
+  for (const sg of suggested(s, now)) {
+    const m = s.members.find(x => x.id === sg.memberId)
+    const sp = store.place(sg.placeId)
+    if (!m || m.ghost || !sp || !onFloor(sp, floor)) continue
+    const p = mapPos(v, sp, sg.nx, sg.ny)
+    const mineToo = m.id === me?.id
+    out.push({
+      key: `s-${m.id}`, member: m.id, name: m.name, mine: mineToo, x: p.x + (out.filter(o => o.suggest && o.key.startsWith('s-')).length % 3) * 9 - 9, y: p.y,
+      color: m.color, acc: m.acc ?? 0, activity: 'walk', live: true, glow: 0.3, signal: null, saver: false, queued: false, suggest: true,
     })
   }
   return out.sort((a, b) => a.y - b.y)
