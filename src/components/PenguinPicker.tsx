@@ -10,7 +10,7 @@ export function PenguinPicker({ color, acc, onColor, onAcc, crewColors = [] }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={label}>Color · repeats are fine, accessories tell you apart</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, minmax(28px, 34px))', justifyContent: 'space-between', rowGap: 10 }}>
           {LASERS.map(c => {
             const on = color.toLowerCase() === c
             const used = lower.filter(x => x === c).length
@@ -20,7 +20,7 @@ export function PenguinPicker({ color, acc, onColor, onAcc, crewColors = [] }: {
                 key={c}
                 aria-label={`Color ${c}`}
                 onClick={() => onColor(c)}
-                style={{ position: 'relative', width: 34, height: 34, borderRadius: '50%', border: 0, cursor: 'pointer', background: 'transparent', boxShadow: on ? `0 0 0 2px ${c}, 0 0 16px -2px ${c}` : 'var(--shadow-sm)', display: 'grid', placeItems: 'center' }}
+                style={{ position: 'relative', width: '100%', aspectRatio: '1', borderRadius: '50%', border: 0, cursor: 'pointer', background: 'transparent', boxShadow: on ? `0 0 0 2px ${c}, 0 0 16px -2px ${c}` : 'var(--shadow-sm)', display: 'grid', placeItems: 'center' }}
               >
                 <span style={{ width: 16, height: 16, borderRadius: '50%', background: c, boxShadow: on ? glow(c, 0.5) : 'none' }} />
                 {used > 0 && <span style={{ position: 'absolute', right: -3, top: -3, minWidth: 14, height: 14, borderRadius: 7, background: '#000', boxShadow: 'var(--shadow-sm)', fontSize: 9, lineHeight: '14px', color: 'var(--color-neutral-300)' }}>{used}</span>}

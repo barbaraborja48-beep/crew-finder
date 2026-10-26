@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { ageOf, pinned } from '../lib/rules'
 import { agoLong, STATUS, where } from '../lib/venue'
-import { useNow } from '../lib/view'
+import { badgeFor, useNow } from '../lib/view'
 import { smsHref, sosSms } from '../lib/sms'
 import { Avatar, Toggle } from '../components/common'
 import { PenguinPicker } from '../components/PenguinPicker'
@@ -68,7 +68,7 @@ export function ProfileSheet() {
         <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-neutral-700)', margin: '0 auto', flex: 'none' }} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Avatar name={trimmed || me.name} color={me.color} acc={me.acc} size={52} />
+          <Avatar name={trimmed || me.name} color={me.color} acc={me.acc} size={52} badge={badgeFor(s, me, mine)} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <input
               aria-label="Your name"
@@ -120,6 +120,21 @@ export function ProfileSheet() {
           </button>
         )}
         {night && <DjSheet sets={[]} now={now} stage={s.places.find(p => p.type === 'stage')?.id} startTab="plan" onClose={() => setNight(false)} />}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <i aria-hidden className="ph ph-identification-badge" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
+          <span style={{ flex: 1, fontSize: 14 }}>
+            Profile circles show
+            <span style={{ display: 'block', ...label }}>A symbol on everyone’s circle, on this phone</span>
+          </span>
+          <div role="radiogroup" aria-label="Profile circles show" style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 'var(--radius-md)', boxShadow: 'var(--shadow-sm)', background: 'var(--color-bg)', flex: 'none' }}>
+            {(['location', 'status'] as const).map(k => (
+              <button key={k} role="radio" aria-checked={s.badgeMode === k} onClick={() => store.setBadgeMode(k)} style={{ border: 0, cursor: 'pointer', font: '500 12px var(--font-body)', padding: '6px 10px', borderRadius: 6, background: s.badgeMode === k ? 'var(--color-accent-800)' : 'transparent', color: s.badgeMode === k ? 'var(--color-accent-100)' : 'var(--color-neutral-400)' }}>
+                {k === 'location' ? 'Where' : 'Status'}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <i aria-hidden className="ph ph-ghost" style={{ fontSize: 18, color: 'var(--color-neutral-300)' }} />
@@ -188,7 +203,12 @@ export function ProfileSheet() {
             Done
           </button>
         </div>
-        <div style={{ ...label, textAlign: 'center', color: 'var(--color-neutral-600)' }}>Version {__BUILD__}</div>
+        <div style={{ ...label, textAlign: 'center', color: 'var(--color-neutral-600)' }}>
+          Version {__BUILD__} ·{' '}
+          <button onClick={() => store.openTour()} style={{ border: 0, background: 'transparent', padding: 0, cursor: 'pointer', font: 'inherit', color: 'var(--color-accent-300)' }}>
+            Replay the intro
+          </button>
+        </div>
       </div>
     </>
   )

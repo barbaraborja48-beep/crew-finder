@@ -20,7 +20,8 @@ async function sql(q, args = []) {
 let browser
 async function phone(name, time, opts = {}) {
   browser ??= await chromium.launch()
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' })
+  const ctx = await browser.newContext({ viewport: opts.viewport ?? { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, serviceWorkers: 'block' })
+  if (!opts.tour) await ctx.addInitScript(() => localStorage.setItem('pingu-tour-done', '1'))
   if (time) await ctx.clock.install({ time: new Date(time) })
   if (opts.lowData) await ctx.addInitScript(() => localStorage.setItem('pingu-low-data', '1'))
   const page = await ctx.newPage()

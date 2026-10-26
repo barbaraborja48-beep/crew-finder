@@ -73,10 +73,101 @@ function Accessory({ acc }: { acc: number }) {
         </g>
       )
     }
+    case 10: // headphones
+      return (
+        <g>
+          <path d="M7 21 Q7 3.5 20 3.5 Q33 3.5 33 21" fill="none" stroke="#1b1b24" strokeWidth="2.6" />
+          <path d="M7 21 Q7 3.5 20 3.5 Q33 3.5 33 21" fill="none" stroke="#ff3bd4" strokeWidth=".8" opacity=".8" />
+          <rect x="3.6" y="15.5" width="6" height="10" rx="2.4" fill="#1b1b24" stroke="#ff3bd4" strokeWidth=".8" />
+          <rect x="30.4" y="15.5" width="6" height="10" rx="2.4" fill="#1b1b24" stroke="#ff3bd4" strokeWidth=".8" />
+        </g>
+      )
+    case 11: // witch hat
+      return (
+        <g>
+          <path d="M12.5 12.5 L22 -9 Q24 -11 25 -8 L27.5 12.5 Z" fill="#3b1d6e" />
+          <rect x="12.6" y="8.4" width="14.8" height="3.2" fill="#ff8a3b" />
+          <rect x="18.4" y="8" width="3.4" height="4" rx=".6" fill="none" stroke="#ffc83b" strokeWidth=".8" />
+          <ellipse cx="20" cy="12.8" rx="14" ry="3" fill="#2a1450" />
+        </g>
+      )
+    case 12: // cat ears
+      return (
+        <g>
+          <path d="M8.6 17.5 L10.2 4.5 L17.4 11.6 Z" fill="#26262c" />
+          <path d="M10.6 14.6 L11.4 8 L15.2 11.8 Z" fill="#ff7ad9" />
+          <path d="M31.4 17.5 L29.8 4.5 L22.6 11.6 Z" fill="#26262c" />
+          <path d="M29.4 14.6 L28.6 8 L24.8 11.8 Z" fill="#ff7ad9" />
+        </g>
+      )
+    case 13: // party hat
+      return (
+        <g>
+          <path d="M14 13.4 L20.6 -4 L26.6 13.4 Z" fill="#ffc83b" />
+          <path d="M15.6 9 L25.2 9 M17.4 4 L23.6 4" stroke="#ff3bd4" strokeWidth="1.6" />
+          <circle cx="20.6" cy="-5.2" r="2.6" fill="#ff3bd4" />
+        </g>
+      )
+    case 14: // bucket hat
+      return (
+        <g>
+          <path d="M9.6 13 Q10 2.6 20 2.6 Q30 2.6 30.4 13 Z" fill="#d9c9a0" />
+          <path d="M9.8 10.6 Q20 8.6 30.2 10.6" fill="none" stroke="#9c8a5c" strokeWidth="1.2" />
+          <ellipse cx="20" cy="13.4" rx="15.4" ry="3.2" fill="#c4b282" />
+        </g>
+      )
+    case 15: // flower crown
+      return (
+        <g>
+          <path d="M8.6 15.6 Q20 8.4 31.4 15.6" fill="none" stroke="#3bff5f" strokeWidth="1.2" />
+          {[[9.6, 14.4, '#ff7ad9'], [14, 11.6, '#ffe53b'], [20, 10.4, '#c4b0ff'], [26, 11.6, '#ff7ad9'], [30.4, 14.4, '#ffe53b']].map(([x, y, c], i) => (
+            <g key={i}>
+              <circle cx={x as number} cy={y as number} r="2.6" fill={c as string} />
+              <circle cx={x as number} cy={y as number} r=".9" fill="#fff" />
+            </g>
+          ))}
+        </g>
+      )
+    case 16: // halo
+      return <ellipse cx="20" cy="2.4" rx="10" ry="2.8" fill="none" stroke="#ffd94d" strokeWidth="2" style={{ filter: 'drop-shadow(0 0 2px #ffd94d)' }} />
+    case 17: // bandana
+      return (
+        <g>
+          <path d="M7.8 17.4 Q20 8.6 32.2 17.4 L31.6 12.6 Q20 4 8.4 12.6 Z" fill="#ff3b5c" />
+          <path d="M31.6 13 L37.6 10.6 L35.6 15 Z M31.8 15 L37 18.6 L33.2 18.8 Z" fill="#d42a48" />
+          {[[13, 12.6], [20, 9.8], [27, 12.6]].map(([x, y], i) => (
+            <circle key={i} cx={x} cy={y} r=".9" fill="#fff" />
+          ))}
+        </g>
+      )
+    case 18: // backwards cap
+      return (
+        <g>
+          <path d="M9 11.2 L0.6 13.4 Q1.4 16 9.2 14.8 Z" fill="#2a63c9" />
+          <path d="M9 14 Q9.4 3.2 20 3.2 Q30.6 3.2 31 14 Z" fill="#3b8bff" />
+          <circle cx="20" cy="3.4" r="1.4" fill="#2a63c9" />
+        </g>
+      )
+    case 19: // star shades
+      return (
+        <g fill="#ffc83b" stroke="#07070b" strokeWidth=".7">
+          <path d={star(15, 20, 5.2)} />
+          <path d={star(25, 20, 5.2)} />
+          <line x1="19.4" y1="19.4" x2="20.6" y2="19.4" stroke="#07070b" strokeWidth="1.2" />
+        </g>
+      )
     default:
       return null
   }
 }
+
+/** A five-point star centred on (cx, cy). */
+const star = (cx: number, cy: number, r: number) =>
+  Array.from({ length: 10 }, (_, i) => {
+    const a = (Math.PI / 5) * i - Math.PI / 2
+    const d = i % 2 ? r * 0.45 : r
+    return `${i ? 'L' : 'M'}${(cx + d * Math.cos(a)).toFixed(2)} ${(cy + d * Math.sin(a)).toFixed(2)}`
+  }).join(' ') + 'Z'
 
 export function Penguin({
   color,
@@ -106,7 +197,7 @@ export function Penguin({
   const delay = `-${(phase(seed) * 2).toFixed(2)}s`
   const k = signal == null ? 1 : SPEED[Math.max(0, Math.min(3, signal))]
   const idle = activity === 'sleep'
-  const eyesHidden = acc === 1 || acc === 2 || acc === 3
+  const eyesHidden = acc === 1 || acc === 2 || acc === 3 || acc === 19
   return (
     <svg
       className={`chr ${animate ? 'anim' : ''} ${activity} m${Math.floor(phase(seed + 'move') * MOVES)}`}

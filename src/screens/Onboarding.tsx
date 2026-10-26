@@ -23,6 +23,11 @@ function Shell({ children, crowd = true }: { children: React.ReactNode; crowd?: 
   )
 }
 
+/** "Halloween squad!" → "halloween-squad" */
+const slug = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24).replace(/-+$/, '')
+const CODE_OK = /^[a-z0-9][a-z0-9-]{2,23}$/
+
 const Err = ({ msg }: { msg: string | null }) => (msg ? <div style={{ fontSize: 13, color: 'var(--sos-text)' }}>{msg}</div> : null)
 
 export function Unconfigured() {
@@ -42,6 +47,11 @@ export function Welcome() {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [venue, setVenue] = useState(VENUES[0].id)
+  // Your invite code: made from the crew name until you edit it yourself.
+  const [invite, setInvite] = useState<string | null>(null)
+  const suggested = slug(name)
+  const inviteCode = invite ?? (CODE_OK.test(suggested) ? suggested : '')
+  const inviteOk = !inviteCode || CODE_OK.test(inviteCode)
   return (
     <Shell>
       <div>
@@ -64,7 +74,7 @@ export function Welcome() {
       </div>
 
       {mode === 'start' ? (
-        <form onSubmit={e => { e.preventDefault(); if (name.trim()) store.createCrew(name.trim(), venue) }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <form onSubmit={e => { e.preventDefault(); if (name.trim() && inviteOk) store.createCrew(name.trim(), venue, inviteCode || undefined) }} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div role="radiogroup" aria-label="Where" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {VENUES.map(o => {
               const on = venue === o.id
@@ -88,7 +98,25 @@ export function Welcome() {
             })}
           </div>
           <input className="input" value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="Crew name, e.g. Saturday squad" />
-          <button className="btn btn-primary" style={{ height: 46 }} disabled={!name.trim() || s.busy}>
+          <label style={{ display: 'flex', alignItems: 'center', height: 46, borderRadius: 'var(--radius-md)', background: 'var(--color-glass)', boxShadow: inviteOk ? 'var(--shadow-sm)' : '0 0 0 1px var(--sos-line)', padding: '0 14px', gap: 2 }}>
+            <span style={{ font: '400 13px var(--font-body)', color: 'var(--color-neutral-500)', whiteSpace: 'nowrap' }}>Invite code</span>
+            <i aria-hidden className="ph ph-pencil-simple" style={{ fontSize: 12, color: 'var(--color-neutral-600)', margin: '0 8px 0 4px' }} />
+            <input
+              aria-label="Invite code"
+              value={inviteCode}
+              maxLength={24}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              onChange={e => setInvite(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+              placeholder="made for you"
+              style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--color-text)', font: '500 15px var(--font-body)' }}
+            />
+          </label>
+          <div style={{ fontSize: 11, color: inviteOk ? 'var(--color-neutral-500)' : 'var(--sos-text)', marginTop: -4 }}>
+            {inviteOk ? (inviteCode ? `Friends join at …/?crew=${inviteCode}` : 'Leave it empty and we’ll make one up.') : '3 to 24 letters, numbers or dashes.'}
+          </div>
+          <button className="btn btn-primary" style={{ height: 46 }} disabled={!name.trim() || !inviteOk || s.busy}>
             {s.busy ? 'Creating…' : 'Create crew'}
           </button>
         </form>

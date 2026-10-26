@@ -1,7 +1,8 @@
+import { useLayoutEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { fresh, pinned } from '../lib/rules'
 import { floorView, hasCloseUp, mapPos, onFloor, outline, placeAt, toMap, TYPES, MAP_W, MAP_H, type Place, type PlaceType, type Venue } from '../lib/venue'
-import { useNow, mySync, crewRows, statusOf, ageLabel, myHuddle, suggested, type CrewRow } from '../lib/view'
+import { useNow, mySync, crewRows, statusOf, ageLabel, myHuddle, suggested, badgeFor, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
 import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill, WeakSignalHint } from '../components/common'
 import { ZoomPan } from '../components/ZoomPan'
@@ -19,7 +20,23 @@ export function MapScreen() {
   const { ui } = s
   // Multi-floor venues show one floor at a time; everything else is unchanged.
   const floors = s.venue?.floors ?? []
-  const v = s.venue && floorView(s.venue, ui.floor)
+  // The map takes half the screen on any phone; the friends list below gets the rest.
+  // The map frame grows taller (never wider), with the plan kept centred in it.
+  const screenRef = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState({ w: MAP_W, h: 844 })
+  useLayoutEffect(() => {
+    const el = screenRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => setBox(b => (b.w === el.clientWidth && b.h === el.clientHeight ? b : { w: el.clientWidth, h: el.clientHeight })))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const fv = s.venue && floorView(s.venue, ui.floor)
+  // A club's floor plan sits centred; a festival map stays anchored at the top and stops where
+  // the map image ends (the list sheet tucks 12 px over it), so no black band shows.
+  const mapEnd = fv && !floors.length ? fv.map_h * fv.view_scale + fv.view_oy + 12 : 560
+  const frameH = Math.round(Math.min(560, mapEnd, Math.max(MAP_H, (0.5 * box.h * MAP_W) / Math.max(1, box.w))))
+  const v = fv && { ...fv, view_oy: fv.view_oy + (floors.length ? (frameH - MAP_H) / 2 : 0) }
   const sync = mySync(s, now)
   const rows = crewRows(s, now)
   const mine = store.myShownDot() // with your buddies, if you're in a group
@@ -41,7 +58,7 @@ export function MapScreen() {
     if (!v || !floors.length) return
     const r = e.currentTarget.getBoundingClientRect()
     const x = ((e.clientX - r.left) / r.width) * MAP_W
-    const y = ((e.clientY - r.top) / r.height) * MAP_H
+    const y = ((e.clientY - r.top) / r.height) * frameH
     const hit = placeAt(s.places, ui.floor, (x - v.view_ox) / v.view_scale, (y - v.view_oy) / v.view_scale)
     store.ui({ areaSel: null })
     if (hit) {
@@ -65,7 +82,7 @@ export function MapScreen() {
   })
 
   return (
-    <div className="screen">
+    <div className="screen" ref={screenRef}>
       <div style={{ padding: 'var(--hdr-top) 20px 10px', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <div>
           <div className="kicker">{v?.name ?? s.crew?.name}</div>
@@ -93,10 +110,10 @@ export function MapScreen() {
         <SyncPill sync={sync} />
       </div>
 
-      <Scaled w={MAP_W} h={MAP_H}>
+      <Scaled w={MAP_W} h={frameH}>
         <ZoomPan
           w={MAP_W}
-          h={MAP_H}
+          h={frameH}
           doubleTap={!floors.length} // on club maps a tap pins you, so no double-tap zoom
           overlay={
             <>
@@ -173,7 +190,7 @@ export function MapScreen() {
                 )}
                 {v && (
                   // Bars, the food truck row and picnic areas at their real size and angle. Tap for a close-up.
-                  <svg width={MAP_W} height={MAP_H} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
+                  <svg width={MAP_W} height={frameH} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
                     {areas.filter(a => a.shape && a.shape.kind !== 'zone').map(a => {
                       const here = (meLive && mine!.place_id === a.id) || liveFriends.some(r => r.dot!.place_id === a.id)
                       return (
@@ -285,7 +302,7 @@ export function MapScreen() {
             style={{ width: '100%', border: 0, background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderBottom: '1px solid var(--color-neutral-900)', textAlign: 'left', opacity: r.member.ghost ? 0.5 : rowOpacity(r.ageS) }}
           >
             <span style={{ opacity: r.member.ghost ? 0.4 : 1 }}>
-              <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={30} />
+              <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={30} badge={badgeFor(s, r.member, r.dot)} />
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 14, fontWeight: 500 }}>

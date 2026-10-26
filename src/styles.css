@@ -51,6 +51,12 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: #000; overscroll-behavior: none; }
+/* iOS 26 Home Screen apps get a viewport one status bar short (WebKit bug 301108), which left a
+   black strip under the tab bar. A page at least as tall as the screen gets the full height back.
+   The min() keeps phones with an opaque status bar from scrolling. */
+@media (display-mode: standalone) {
+  html { min-height: min(100lvh, calc(100% + env(safe-area-inset-top))); }
+}
 body {
   color: var(--color-text);
   font-family: var(--font-body);
@@ -315,8 +321,11 @@ a { color: var(--color-accent-300); }
   overflow: hidden; isolation: isolate; color: #fff; background: #050508; border-radius: 18px 18px 0 0; container-type: inline-size;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 10px 40px -14px #a98bff;
 }
+.dj.round { border-radius: 18px; } /* festival stages: the screen stands on its own */
+/* Safari doesn't clip blurred, blended layers to rounded corners on its own: this layer does. */
+.dj-clip { position: absolute; inset: 0; z-index: 0; border-radius: inherit; overflow: hidden; -webkit-mask-image: -webkit-radial-gradient(white, black); mask-image: radial-gradient(white, black); }
 .dj::after, .dj-sheet::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .16; mix-blend-mode: overlay; z-index: 1;
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .16; mix-blend-mode: overlay; z-index: 1; border-radius: inherit;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .lava { position: absolute; inset: -30%; filter: blur(22px) saturate(1.3); z-index: 0; }
@@ -351,7 +360,9 @@ a { color: var(--color-accent-300); }
 .dj-sheet-top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; padding: 0 18px 8px; }
 .dj-pages { position: relative; z-index: 2; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; }
 .dj-page { flex: 0 0 100%; scroll-snap-align: start; padding: 4px 18px 6px; box-sizing: border-box; min-height: 300px; display: flex; flex-direction: column; }
-.dj-row { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 16px; margin-bottom: 8px; background: rgba(0, 0, 0, .3); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); }
+.dj-row { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 16px; margin-bottom: 8px; background: rgba(0, 0, 0, .3); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .08); width: 100%; min-width: 0; }
+/* The name column. width 0 + grow: iPhone Safari otherwise widens every row to the longest name. */
+.dj-row-main { flex: 1 1 0; width: 0; min-width: 0; }
 .dj-row.live { background: rgba(0, 0, 0, .18); box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, .7), 0 0 24px -6px #ff3bd4; }
 .dj-row.done { opacity: .45; }
 .dj-row-time { width: 56px; font: 500 13px var(--font-body); font-variant-numeric: tabular-nums; }
@@ -384,3 +395,10 @@ a { color: var(--color-accent-300); }
 .dj-remind-opts button.on { background: #ffc83b; color: #000; box-shadow: none; }
 .dj-clash { display: flex; align-items: center; gap: 8px; margin: 0 6px 8px; padding: 8px 12px; border-radius: 12px; background: rgba(255, 59, 92, .16); box-shadow: inset 0 0 0 1px rgba(255, 92, 122, .5); font: 500 12px var(--font-body); color: #ffb3c1; }
 .dj-clash select { border: 0; border-radius: 8px; padding: 4px 6px; background: rgba(0, 0, 0, .5); color: #fff; font: 600 12px var(--font-body); }
+
+/* Festival lineup: one height for every stage tab (half the screen); the list scrolls inside. */
+.dj-sheet.fixed { height: 50%; display: flex; flex-direction: column; overflow: hidden; }
+.dj-sheet.fixed > .dj-pages, .dj-sheet.fixed > .dj-page { flex: 1; min-height: 0; }
+.dj-sheet.fixed > .dj-page, .dj-sheet.fixed .dj-pages > .dj-page { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
+.dj-sheet.fixed .dj-row { padding: 10px 12px; margin-bottom: 6px; }
+.dj-sheet.fixed .dj-sheet-top, .dj-sheet.fixed .dj-tabs, .dj-sheet.fixed .dj-dots { flex: none; }

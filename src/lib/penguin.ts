@@ -44,7 +44,10 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
 }
 
 /** Accessories: one per penguin, stored as a single number. */
-export const ACCESSORIES = ['None', 'Shades', 'Heart shades', 'Neon visor', 'Devil horns', 'Costume mask', 'Crown', 'Pink wig', 'Blue wig', 'Lime wig'] as const
+export const ACCESSORIES = [
+  'None', 'Shades', 'Heart shades', 'Neon visor', 'Devil horns', 'Costume mask', 'Crown', 'Pink wig', 'Blue wig', 'Lime wig',
+  'Headphones', 'Witch hat', 'Cat ears', 'Party hat', 'Bucket hat', 'Flower crown', 'Halo', 'Bandana', 'Backwards cap', 'Star shades',
+] as const
 
 /** Signal 0-3 → animation speed multiplier (smaller = faster). */
 export const SPEED = [3, 1.7, 1, 0.68]

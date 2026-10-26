@@ -108,6 +108,8 @@ export interface State {
   prefs: Prefs
   plans: Record<string, PlanItem[] | null> // friends' set plans, if they share them
   answered: Record<string, true> // buddy requests you said yes or no to (this phone)
+  badgeMode: 'location' | 'status' // what the symbol on profile circles shows (this phone)
+  tour: boolean // the intro tour is showing (once per phone, then from the profile)
   toast: { text: string; icon: string; fg: string; key: number; undo?: boolean; solo?: boolean } | null
   ui: {
     screen: Screen
@@ -119,6 +121,34 @@ export interface State {
     floor: number // multi-floor venues: which floor the map shows
     sheet: boolean
     sos: boolean
+  }
+}
+
+// Per-phone settings, read before the first render.
+const TOUR_KEY = 'pingu-tour-done'
+function flag(key: string) {
+  try {
+    return localStorage.getItem(key) === '1'
+  } catch {
+    return true // storage blocked: don't show the tour every time
+  }
+}
+
+const BADGE_KEY = 'pingu-badge'
+function loadBadgeMode(): 'location' | 'status' {
+  try {
+    return localStorage.getItem(BADGE_KEY) === 'status' ? 'status' : 'location'
+  } catch {
+    return 'location'
+  }
+}
+
+const LOW_DATA_KEY = 'pingu-low-data'
+function loadLowData() {
+  try {
+    return localStorage.getItem(LOW_DATA_KEY) === '1' // good connection unless you switched
+  } catch {
+    return false
   }
 }
 
@@ -149,6 +179,8 @@ const initial: State = {
   prefs: { mutes: [], plan: [], plan_shared: false },
   plans: {},
   answered: {},
+  badgeMode: loadBadgeMode(),
+  tour: !flag(TOUR_KEY),
   toast: null,
   ui: {
     screen: 'map',
@@ -161,15 +193,6 @@ const initial: State = {
     sheet: false,
     sos: false,
   },
-}
-
-const LOW_DATA_KEY = 'pingu-low-data'
-function loadLowData() {
-  try {
-    return localStorage.getItem(LOW_DATA_KEY) === '1' // good connection unless you switched
-  } catch {
-    return false
-  }
 }
 
 // ─── row conversion ───────────────────────────────────────────────────────
@@ -380,11 +403,16 @@ class Store {
     }
   }
 
-  async createCrew(name: string, venueId?: string) {
+  async createCrew(name: string, venueId?: string, code?: string) {
     this.set({ busy: true, error: null })
     try {
       await ensureAuth()
-      const { data, error } = await supabase.rpc('create_crew', { p_name: name, ...(venueId ? { p_venue: venueId } : {}) })
+      const args = { p_name: name, ...(venueId ? { p_venue: venueId } : {}) }
+      let { data, error } = await supabase.rpc('create_crew', code ? { ...args, p_code: code } : args)
+      if (error && code && (error.code === 'PGRST202' || /p_code/.test(error.message))) {
+        // The database update for custom codes isn't in yet: start the crew with a random code.
+        ;({ data, error } = await supabase.rpc('create_crew', args))
+      }
       if (error) throw error
       await this.openInvite(data as string)
     } catch (e) {
@@ -476,6 +504,29 @@ class Store {
     const memberId = this.state.session?.memberId
     if (memberId) void import('./push').then(m => m.syncPushPrefs(memberId, on)).catch(() => {}) // pin/chat notifications pause in low data
     this.toast(on ? 'Low data mode on' : 'Good connection mode · live updates', on ? 'ph ph-gauge' : 'ph ph-cell-signal-full')
+  }
+
+  /** Profile circles show where people are, or their status (this phone only). */
+  setBadgeMode(mode: 'location' | 'status') {
+    try {
+      localStorage.setItem(BADGE_KEY, mode)
+    } catch {
+      /* private mode */
+    }
+    this.set({ badgeMode: mode })
+  }
+
+  closeTour() {
+    try {
+      localStorage.setItem(TOUR_KEY, '1')
+    } catch {
+      /* private mode */
+    }
+    this.set({ tour: false })
+  }
+  openTour() {
+    this.set({ tour: true })
+    this.ui({ sheet: false })
   }
 
   /** "Not now" on the weak-signal hint: don't ask again until the app restarts. */
@@ -1224,6 +1275,8 @@ async function batteryLevel(): Promise<number | null> {
 function friendly(e: unknown) {
   const msg = e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: string }).message) : String(e)
   if (/color taken/.test(msg)) return 'Someone just took that color. Pick another.'
+  if (/code taken/.test(msg)) return 'That invite code is taken. Try another one.'
+  if (/bad code/.test(msg)) return 'Invite codes use 3 to 24 letters, numbers or dashes.'
   if (/invite not found/.test(msg)) return 'That invite code doesn’t exist. Check the link?'
   if (/crew is full/.test(msg)) return 'This crew is full (12 people max).'
   if (/anonymous/i.test(msg)) return 'Anonymous sign-ins are off in Supabase. See SETUP.md, step 3.'

@@ -4,7 +4,7 @@ import { pinned } from '../lib/rules'
 import { hasCloseUp, STATUS, where } from '../lib/venue'
 import { spotSms, smsHref } from '../lib/sms'
 import { Penguin } from './Penguin'
-import type { SyncDef } from '../lib/view'
+import { badgeFor, type SyncDef } from '../lib/view'
 
 /** Lays out children at a fixed design size (e.g. 390×346) and scales to the phone's width. */
 export function Scaled({ w, h, children, style, innerRef }: { w: number; h: number; children: ReactNode; style?: CSSProperties; innerRef?: React.Ref<HTMLDivElement> }) {
@@ -106,16 +106,36 @@ export function Toast() {
   )
 }
 
+/** A symbol on someone's profile circle: where they are (a stage logo or a place icon) or their status. */
+export interface Badge {
+  label: string
+  logo?: string // image, e.g. a festival stage's logo
+  icon?: string // Phosphor icon class
+}
+
 /** Your penguin's face in a glowing circle: used for profile, crew lists and chat. */
-export function Avatar({ name, color, acc = 0, size = 40 }: { name: string; color: string; acc?: number; size?: number }) {
+export function Avatar({ name, color, acc = 0, size = 40, badge = null }: { name: string; color: string; acc?: number; size?: number; badge?: Badge | null }) {
+  const h = Math.round(Math.max(14, size * 0.42))
   return (
-    <span
-      title={name}
-      style={{ width: size, height: size, flex: 'none', borderRadius: '50%', overflow: 'hidden', position: 'relative', background: `radial-gradient(circle at 50% 70%, color-mix(in srgb, ${color} 34%, #000), #050508 72%)`, boxShadow: `inset 0 0 0 1.5px ${color}, 0 0 14px -3px ${color}`, display: 'block' }}
-    >
-      <span style={{ position: 'absolute', left: '50%', top: '14%', transform: 'translateX(-50%)' }}>
-        <Penguin color={color} activity="chill" seed={name} size={size * 0.92} acc={acc} animate={false} />
+    <span title={badge ? `${name} · ${badge.label}` : name} style={{ width: size, height: size, flex: 'none', position: 'relative', display: 'block' }}>
+      <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: `radial-gradient(circle at 50% 70%, color-mix(in srgb, ${color} 34%, #000), #050508 72%)`, boxShadow: `inset 0 0 0 1.5px ${color}, 0 0 14px -3px ${color}` }}>
+        <span style={{ position: 'absolute', left: '50%', top: '14%', transform: 'translateX(-50%)' }}>
+          <Penguin color={color} activity="chill" seed={name} size={size * 0.92} acc={acc} animate={false} />
+        </span>
       </span>
+      {badge && (
+        // On top of the penguin, over the circle's top edge, so it reads at any size.
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute', left: '50%', top: -h * 0.42, transform: 'translateX(-50%)', height: h, minWidth: h, maxWidth: size * 1.5,
+            padding: badge.logo ? `0 ${Math.round(h * 0.28)}px` : 0, borderRadius: h, background: 'rgba(8,8,12,.92)', boxShadow: `0 0 0 1px ${color}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: h * 0.68, lineHeight: 1, zIndex: 1,
+          }}
+        >
+          {badge.logo ? <img src={badge.logo} alt="" style={{ display: 'block', height: h * 0.7, maxWidth: size * 1.5 - h * 0.56, objectFit: 'contain' }} /> : <i className={badge.icon} />}
+        </span>
+      )}
     </span>
   )
 }
@@ -127,7 +147,7 @@ export function ProfileButton() {
   if (!me) return null
   return (
     <button aria-label="Your profile" onClick={() => store.ui({ sheet: true })} style={{ border: 0, padding: 0, background: 'transparent', cursor: 'pointer', borderRadius: '50%' }}>
-      <Avatar name={me.name} color={me.color} acc={me.acc} />
+      <Avatar name={me.name} color={me.color} acc={me.acc} badge={badgeFor(s, me, store.myShownDot())} />
     </button>
   )
 }

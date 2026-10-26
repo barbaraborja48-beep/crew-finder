@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { floorView, glow, where } from '../lib/venue'
 import { rowOpacity } from '../lib/rules'
-import { useNow, crewRows, statusOf, ageLabel, isStandalone, isIOS, suggested } from '../lib/view'
+import { useNow, crewRows, statusOf, ageLabel, isStandalone, isIOS, suggested, badgeFor } from '../lib/view'
 import { Avatar, Toggle } from '../components/common'
 import { LetGoSheet, PlanMoveSheet, SocialBanners } from '../components/Social'
 import { planTimeline, type DjSet } from '../lib/social'
@@ -64,7 +64,7 @@ export function CrewScreen() {
             style={{ border: 0, cursor: 'pointer', borderRadius: 'var(--radius-lg)', background: 'var(--color-surface)', boxShadow: 'var(--shadow-sm)', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', opacity: r.member.ghost ? 0.5 : rowOpacity(r.ageS) }}
           >
             <span style={{ opacity: r.member.ghost ? 0.4 : 1 }}>
-              <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={38} />
+              <Avatar name={r.member.name} color={r.member.ghost ? '#5a5a62' : r.member.color} acc={r.member.acc} size={38} badge={badgeFor(s, r.member, r.dot)} />
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 15, fontWeight: 500 }}>

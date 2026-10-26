@@ -53,6 +53,16 @@ export interface Venue {
   lineup?: { name: string; start: string; end: string; stage?: string }[] // the DJ screen's set times (festivals: per stage)
 }
 
+/** Halloween Takeover's stages wear their own logos on profile circles (cut from the poster). */
+export const HALLOWEEN_ID = 'e1e0a000-0000-4000-8000-000000000001'
+export const STAGE_LOGOS: Record<string, string> = {
+  elrow: '/assets/logos/elrow.png',
+  brunch: '/assets/logos/brunch.png',
+  industry: '/assets/logos/industry.png',
+  plaza: '/assets/logos/plaza.png',
+  jail: '/assets/logos/jail.png',
+}
+
 /** Venues you can start a crew at. The maps live in /public/assets. */
 export const VENUES = [
   { id: 'e1e0a000-0000-4000-8000-000000000001', name: 'Halloween Takeover', where: 'Recinto Iberdrola Music · 31.10.26' },
@@ -92,7 +102,10 @@ export const STATUS: [icon: string, label: string][] = [
 export const ME = '#3bf0ff'
 
 /** Colors friends can pick. Cyan is reserved for "you". */
-export const LASERS = ['#ff3bd4', '#b6ff3b', '#ffc83b', '#ff3b5c', '#ff8a3b', '#a46bff', '#3bffb0', '#3b8bff', '#ff7ad9', '#f3f5fe']
+export const LASERS = [
+  '#ff3bd4', '#b6ff3b', '#ffc83b', '#ff3b5c', '#ff8a3b', '#a46bff', '#3bffb0', '#3b8bff', '#ff7ad9', '#f3f5fe',
+  '#ffe53b', '#3bff5f', '#d23bff', '#5b4bff', '#ffb38a', '#c4b0ff', '#a3a3b8', '#ffd1e8',
+]
 
 /** The map frame in the design is 390×346 logical px. */
 export const MAP_W = 390

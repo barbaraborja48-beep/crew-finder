@@ -3,7 +3,7 @@ import { store, useStore } from '../lib/store'
 import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
 import { agoLong, CORNER, hasCloseUp, isLine, placeTitle, rowDip, TYPES, where, type Place, type PlaceType, type SquareShape } from '../lib/venue'
 import { DjDisplay, DjSheet } from '../components/DjDisplay'
-import { useNow, mySync, crewRows, statusOf, myHuddle, suggested } from '../lib/view'
+import { useNow, mySync, crewRows, statusOf, myHuddle, suggested, badgeFor } from '../lib/view'
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
 import { Penguin } from '../components/Penguin'
 import { activityFor } from '../lib/penguin'
@@ -206,7 +206,9 @@ export function StageScreen() {
   if (!place) return <div className="screen" />
   // Club dance floors (Mondo) get the crowd's-eye layout with the DJ screen on top.
   const sq = place.shape?.kind === 'square' ? place.shape : null
-  const H = sq && fitH ? Math.min(760, Math.max(330, fitH)) : floorHeight(place)
+  // Stage floors (the club's and every festival stage) fill the screen down to the footer, whatever
+  // the phone, so they're all the same height and nothing hides under the tab bar.
+  const H = place.type === 'stage' && fitH ? Math.min(760, Math.max(sq ? 330 : 300, fitH)) : floorHeight(place)
   // Festival lineups name each set's stage; a club's single lineup belongs to its dance floor.
   const lineup = (s.venue?.lineup ?? []).filter(x => (x.stage ? x.stage === place.id : !!sq))
   const festivalDj = !sq && place.type === 'stage' && lineup.length > 0
@@ -310,7 +312,7 @@ export function StageScreen() {
         )}
         {festivalDj && (
           <div style={{ marginBottom: 6 }}>
-            <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} />
+            <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} round />
           </div>
         )}
         {place.type === 'stage' && !(sq && lineup.length > 0) && (
@@ -390,7 +392,7 @@ export function StageScreen() {
         <div style={{ padding: '12px 20px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
           {me && (
             <span style={{ opacity: meLive ? 1 : 0.45 }}>
-              <Avatar name={me.name} color={me.color} acc={me.acc} size={34} />
+              <Avatar name={me.name} color={me.color} acc={me.acc} size={34} badge={badgeFor(s, me, mine)} />
             </span>
           )}
           <div style={{ flex: 1, minWidth: 0 }}>

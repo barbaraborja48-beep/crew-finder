@@ -8,6 +8,7 @@ import { CrewScreen, FindScreen } from './screens/CrewScreen'
 import { ShortcutScreen } from './screens/ShortcutScreen'
 import { ProfileSheet, SosScreen } from './screens/Overlays'
 import { Join, Unconfigured, Welcome } from './screens/Onboarding'
+import { Tour } from './components/Tour'
 
 export default function App() {
   const s = useStore()
@@ -39,6 +40,7 @@ export default function App() {
           {screen !== 'find' && <TabBar />}
           <ProfileSheet key={String(s.ui.sheet)} />
           <SosScreen />
+          <Tour />
         </>
       )}
       <Toast />

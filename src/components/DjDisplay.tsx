@@ -44,23 +44,25 @@ const inWords = (s: number) => {
 /** Slow blurred colour blobs, like a lava lamp lit by aura colours. */
 function Aura({ calm = false }: { calm?: boolean }) {
   return (
-    <div className={`lava ${calm ? 'calm' : ''}`} aria-hidden>
-      <i className="b1" />
-      <i className="b2" />
-      <i className="b3" />
-      <i className="b4" />
-      <i className="b5" />
+    <div className="dj-clip" aria-hidden>
+      <div className={`lava ${calm ? 'calm' : ''}`}>
+        <i className="b1" />
+        <i className="b2" />
+        <i className="b3" />
+        <i className="b4" />
+        <i className="b5" />
+      </div>
     </div>
   )
 }
 
-export function DjDisplay({ sets, now, onOpen }: { sets: DjSet[]; now: number; onOpen: () => void }) {
+export function DjDisplay({ sets, now, onOpen, round = false }: { sets: DjSet[]; now: number; onOpen: () => void; round?: boolean }) {
   const { current, next, over } = lineupState(sets, now)
   const shown = current ?? next
   const f = current ? (now - ms(current.start)) / (ms(current.end) - ms(current.start)) : 0
   const tag = shown ? dayTag(shown.start) : null
   return (
-    <button className="dj" onClick={onOpen} aria-label={current ? `Now playing: ${current.name}. Show set times` : 'Show set times'}>
+    <button className={round ? 'dj round' : 'dj'} onClick={onOpen} aria-label={current ? `Now playing: ${current.name}. Show set times` : 'Show set times'}>
       <Aura calm={!current} />
       <div className="dj-body">
         <div className="dj-kicker">
@@ -123,7 +125,7 @@ export function DjSheet({ sets: stageSets, now, onClose, stage, startTab }: { se
   // Rendered on top of the whole app (over the tab bar), not inside the scrolling page.
   return createPortal(
     <div className="dj-sheet-bg" onClick={onClose}>
-      <div className="dj-sheet" onClick={e => e.stopPropagation()}>
+      <div className={festival ? 'dj-sheet fixed' : 'dj-sheet'} onClick={e => e.stopPropagation()}>
         <Aura calm />
         <div className="dj-sheet-top">
           <span className="dj-kicker" style={{ margin: 0 }}>
@@ -168,7 +170,7 @@ export function DjSheet({ sets: stageSets, now, onClose, stage, startTab }: { se
                     {hhmm(s.start)}
                     <span>{hhmm(s.end)}</span>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="dj-row-main">
                     <div className="dj-row-name" style={festival ? { fontSize: 19 } : undefined}>{s.name}</div>
                     {live && (
                       <div className="dj-bar" style={{ marginTop: 6 }}>
@@ -280,7 +282,7 @@ function MyNight({ lineup, plan, now, editing, setEditing }: { lineup: DjSet[]; 
                 {hm(r.from)}
                 <span>{hm(r.to)}</span>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="dj-row-main">
                 <div className="dj-row-name" style={{ fontSize: 18 }}>{r.set.name}</div>
                 <div className="dj-label" style={{ fontSize: 11 }}>{stageName(r.set.stage)}</div>
                 {!done && <RemindChip item={r.item} open={editing === r.item.k} onToggle={() => setEditing(editing === r.item.k ? null : r.item.k)} />}
