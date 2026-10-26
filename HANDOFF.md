@@ -43,7 +43,7 @@ Read this first in a new chat. It covers what the app is, where everything lives
     - **Floor plans:** `public/assets/mondo-p1.webp` / `-p2.webp`, with the VIP tables erased.
 - **Other features:** crew chat (text, location, photos), status and note, ghost mode, SOS (hold the button), ping a friend, meet spot, an iPhone Shortcut for one-touch pins, and an offer to text your spot when a pin is stuck for 30 seconds.
 
-## Added 26 Oct (branch `pingu-polish`, preview sent, not merged yet)
+## Added 26 Oct (merged to `main`; SQL 12 given to Barbara)
 
 - **iPhone bottom gap fixed:** iOS 26 Home Screen apps get a viewport one status bar short (WebKit bug 301108), leaving a black strip under the tab bar. Fix: a standalone-only `min-height` on `html` in `styles.css`.
 - **Layout:** the map is half the screen (festival map anchored at the top and capped where the image ends; club plans centred), the friends list fills the rest. Every stage close-up fits the screen above the footer. The festival lineup sheet is half the screen on every stage tab and scrolls inside. DJ screens are fully rounded on festival stages, and a `.dj-clip` layer makes Safari clip the lava blobs to the corners. Lineup rows no longer run off the right edge on iPhone (`.dj-row-main`).
@@ -95,11 +95,11 @@ The switch is in the profile (top-right avatar) and applies to that phone only. 
 9. `20261029120000_lineup_feedback_lowsignal.sql`: DJ lineup, `feature_taps` and `feedback` logs (it also limited notifications, which file 10 reverses)
 10. `20261030120000_notification_switches.sql`: pin and chat notifications back on, filtered per person
 11. `20261031120000_buddies_plans_moves.sql`: buddies, mutes, Halloween lineup per stage, plans + reminders (pg_cron job `pingu-reminders`), planned moves, new `crew_sync` (adds `p_prefs`)
-12. `20261101120000_custom_invite_code.sql`: `create_crew` takes an optional `p_code` (on the `pingu-polish` branch)
+12. `20261101120000_custom_invite_code.sql`: `create_crew` takes an optional `p_code`
 
 Plus two fixes she already ran: `supabase/fixes/2026-10-23_push_apikey.sql` and `2026-10-23b_push_key_from_db.sql`.
 
-**Status:** Barbara ran 1 to 10. The app with the new features is merged and live; she was given the links for **SQL 11** and the push function redeploy (both needed: until SQL 11 runs, the Halloween DJ screens don't show and stars/mutes wait in the outbox). Confirm she did both.
+**Status (26 Oct):** 1 to 11 are run and the push function with buddies/moves/reminders is deployed (checked through the Supabase connection, read-only). **12 was just given to her**; until it runs, new crews get a random code. The push function didn't change on 26 Oct.
 
 ## Open items
 
