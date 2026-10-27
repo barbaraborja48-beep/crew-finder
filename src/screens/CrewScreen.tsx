@@ -182,7 +182,7 @@ export function CrewScreen() {
         </button>
       </div>
       <div style={{ fontSize: 10, lineHeight: 1.4, color: 'var(--color-neutral-600)', textAlign: 'center', padding: '0 12px' }}>
-        PinGü keeps names, pins and messages from each night to improve the app.
+        PinGü stores data for improvement purposes only.
       </div>
       {planning && <PlanMoveSheet onClose={() => setPlanning(false)} />}
     </div>
