@@ -98,7 +98,7 @@ export function Tour() {
     <div role="dialog" aria-label="Welcome to PinGü" className="screen" style={{ zIndex: 30, background: `radial-gradient(80% 50% at 50% 38%, color-mix(in srgb, ${c} 22%, #000), #000 72%)` }}>
       <div style={{ padding: 'var(--hdr-top) 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.02em' }}>PinGü</span>
-        <button className="btn btn-ghost" style={{ height: 34, color: 'var(--color-neutral-300)' }} onClick={() => store.closeTour()}>
+        <button className="btn btn-ghost" style={{ height: 34, color: 'var(--color-neutral-300)' }} onClick={() => store.closeTour(page + 1, false)}>
           Skip
         </button>
       </div>
@@ -124,7 +124,7 @@ export function Tour() {
             <i key={card.title} className={i === page ? 'on' : ''} />
           ))}
         </div>
-        <button className="btn btn-primary btn-block" style={{ height: 50, alignSelf: 'stretch' }} onClick={() => (last ? store.closeTour() : go(page + 1))}>
+        <button className="btn btn-primary btn-block" style={{ height: 50, alignSelf: 'stretch' }} onClick={() => (last ? store.closeTour(cards.length, true) : go(page + 1))}>
           {last ? 'Let’s go' : 'Next'}
         </button>
       </div>

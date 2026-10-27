@@ -134,6 +134,26 @@ function flag(key: string) {
   }
 }
 
+// A random id per phone for the anonymous stats (not linked to a name or a member).
+const DEVICE_KEY = 'pingu-device'
+function deviceId() {
+  try {
+    let d = localStorage.getItem(DEVICE_KEY)
+    if (!d) localStorage.setItem(DEVICE_KEY, (d = Math.random().toString(36).slice(2, 10)))
+    return d
+  } catch {
+    return 'private'
+  }
+}
+/** An anonymous app event, waiting to ride along with the next sync. t = when it happened. */
+interface AppEvent {
+  i: string // its own id: a resend after a lost reply is counted once
+  k: string
+  v?: number
+  m?: Record<string, unknown>
+  t: number
+}
+
 const BADGE_KEY = 'pingu-badge'
 function loadBadgeMode(): 'location' | 'status' {
   try {
@@ -286,6 +306,9 @@ class Store {
   private saveTimer: ReturnType<typeof setTimeout> | undefined
   private toastTimer: ReturnType<typeof setTimeout> | undefined
   private started = false
+  private events: AppEvent[] = []
+  private eventsOff = false // the database doesn't take events yet (insights.sql not run)
+  private hiddenAt = 0
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn)
@@ -362,6 +385,7 @@ class Store {
 
     const invite = new URLSearchParams(location.search).get('crew')?.trim().toLowerCase() || null
     type Snap = Pick<State, 'session' | 'venue' | 'places' | 'crew' | 'members' | 'checkins' | 'ghostDot'> & Partial<Pick<State, 'prefs' | 'plans' | 'answered'>> & { messages: Message[] }
+    this.events = (await kv.get<AppEvent[]>('events')) ?? []
     const snap = await kv.get<Snap>('snapshot')
     const items = await outbox.all()
     const pending: Record<string, Sync> = {}
@@ -456,6 +480,20 @@ class Store {
     this.set({ checkins: {}, messages: {}, members: [], crew: null, ghostDot: null, pending: {}, prefs: initial.prefs, plans: {}, answered: {} })
   }
 
+  // ─── anonymous stats ──────────────────────────────────────────────────
+
+  /**
+   * Note a moment for the anonymous stats (see insights.sql): no name, no messages. It waits
+   * on the phone and rides along with the next sync, so it never costs an extra request.
+   */
+  track(kind: string, value?: number, meta?: Record<string, unknown>) {
+    this.events = [...this.events, { i: uuid(), k: kind, v: value, m: meta, t: Date.now() }].slice(-100)
+    void kv.set('events', this.events)
+  }
+  private mode() {
+    return this.state.dataSaver ? 'low' : 'good'
+  }
+
   // ─── sync ─────────────────────────────────────────────────────────────
 
   private start() {
@@ -463,7 +501,11 @@ class Store {
     window.addEventListener('offline', () => this.set({ signal: 'none' }))
     window.addEventListener('pagehide', () => this.saveNow())
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return void this.saveNow()
+      if (document.visibilityState !== 'visible') {
+        this.hiddenAt = Date.now()
+        return void this.saveNow()
+      }
+      if (this.hiddenAt && Date.now() - this.hiddenAt > 10 * 60_000) this.track('open', undefined, { mode: this.mode(), back: true })
       if (Date.now() - this.lastSyncTry > 5_000) this.queueSync()
     })
     navigator.serviceWorker?.addEventListener('message', e => {
@@ -488,6 +530,8 @@ class Store {
     this.applyMode()
     const me = this.me()
     if (me && me.saver !== this.state.dataSaver) this.updateMe({ saver: this.state.dataSaver }) // friends' badge
+    const home = window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
+    this.track('open', undefined, { mode: this.mode(), home })
     this.sync()
   }
 
@@ -501,6 +545,7 @@ class Store {
     this.set({ dataSaver: on, weakSignal: false })
     this.applyMode()
     this.updateMe({ saver: on }) // friends see a small badge on your penguin
+    this.track('mode', undefined, { on })
     const memberId = this.state.session?.memberId
     if (memberId) void import('./push').then(m => m.syncPushPrefs(memberId, on)).catch(() => {}) // pin/chat notifications pause in low data
     this.toast(on ? 'Low data mode on' : 'Good connection mode · live updates', on ? 'ph ph-gauge' : 'ph ph-cell-signal-full')
@@ -516,7 +561,9 @@ class Store {
     this.set({ badgeMode: mode })
   }
 
-  closeTour() {
+  /** seen = how many cards they looked at; done = finished it rather than skipping. */
+  closeTour(seen?: number, done?: boolean) {
+    if (seen != null) this.track('tour', seen, { done: !!done })
     try {
       localStorage.setItem(TOUR_KEY, '1')
     } catch {
@@ -621,6 +668,7 @@ class Store {
       if (me) delete me.last_seen // the server stamps it
       const netSent = this.netToReport
       if (netSent != null) me = { ...(me ?? {}), net: netSent } // a couple of bytes on a request we're making anyway
+      const evs = this.eventsOff ? [] : this.events.slice(0, 50)
       const t0 = performance.now()
       const sentAt = Date.now()
       const { data, error, status } = await supabase.rpc('crew_sync', {
@@ -632,8 +680,16 @@ class Store {
         p_me: me,
         p_crew: crew,
         ...(prefs ? { p_prefs: prefs } : {}), // only when changed, so older databases still match
+        ...(evs.length ? { p_events: evs.map(e => ({ i: e.i, k: e.k, v: e.v, m: e.m, d: deviceId(), a: sentAt - e.t })) } : {}),
       })
       this.measureSignal(error && isTransient(error, status) ? null : performance.now() - t0)
+      if (error && evs.length && (error.code === 'PGRST202' || status === 404)) {
+        // The database doesn't take stats yet (insights.sql): keep them on the phone and resend without.
+        this.eventsOff = true
+        items.forEach(i => this.setPending(i.id, 'queued'))
+        this.syncAgain = true
+        return
+      }
       if (error && (error.code === 'PGRST202' || status === 404)) {
         // The database update (low_data_sync.sql) isn't in yet: use the older, chattier way for now.
         ok = await this.legacySync(items, session.crewId)
@@ -665,12 +721,19 @@ class Store {
         }
         await outbox.del(it.key)
         this.setPending(it.id, null)
+        // How long this pin waited for signal, from your tap until the server had it.
+        if (it.table === 'checkins') this.track('pin_wait', Date.now() - it.createdAt, { mode: this.mode(), net: this.state.myNet })
+      }
+      if (evs.length) {
+        this.events = this.events.slice(evs.length)
+        void kv.set('events', this.events)
       }
       if (netSent != null && this.netToReport === netSent) this.netToReport = null
       this.applySync(r, session.crewId)
-      if (r.rejected.length) {
+      const rejected = r.rejected.filter(x => x !== 'events') // a stat that didn't fit is just dropped
+      if (rejected.length) {
         // e.g. someone took that color a second earlier. Pull a full copy to undo our local guess.
-        this.toast(r.rejected.includes('me') ? 'Couldn’t save that change, try another color or name' : 'Couldn’t send one item', 'ph ph-warning', '#ff7a92')
+        this.toast(rejected.includes('me') ? 'Couldn’t save that change, try another color or name' : 'Couldn’t send one item', 'ph ph-warning', '#ff7a92')
         await kv.set('cursor', null)
         this.syncAgain = true
       } else {

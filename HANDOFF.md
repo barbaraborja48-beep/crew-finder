@@ -43,6 +43,13 @@ Read this first in a new chat. It covers what the app is, where everything lives
     - **Floor plans:** `public/assets/mondo-p1.webp` / `-p2.webp`, with the VIP tables erased.
 - **Other features:** crew chat (text, location, photos), status and note, ghost mode, SOS (hold the button), ping a friend, meet spot, an iPhone Shortcut for one-touch pins, and an offer to text your spot when a pin is stuck for 30 seconds.
 
+## Added 27 Oct (branch `pingu-insights`)
+
+- **Anonymous stats** (`app_events`): app opened (and whether from the Home Screen, which mode), intro tour finished or skipped (cards seen), how long each pin waited for signal (tap to server, with mode and signal level), low data mode switched, lineup opened. They wait on the phone (`store.track`, kv `events`, max 100) and ride along with the next `crew_sync` as `p_events`, each with its own id so a resend counts once. No names, no member ids; a random id per phone (`pingu-device`).
+- **Night summary** (`night_stats`): one row of totals per crew (pins per place and hour, message types, buddies, plans, most-starred sets, mutes, low data, notifications). `purge_old_crews()` saves it before deleting crews 48 h after the event (and still deletes on time if saving fails). `select public.save_night_stats()` saves every crew now.
+- Small note at the bottom of the Crew tab: "PinGü collects anonymous stats to improve the app: no names, no messages."
+- A reminder is scheduled in this session for Sun 1 Nov 11:00 UTC to build the Halloween insights dashboard (Halloween crews are deleted ~02:00 Madrid, Tue 3 Nov).
+
 ## Added 26 Oct (merged to `main`; SQL 12 given to Barbara)
 
 - **iPhone bottom gap fixed:** iOS 26 Home Screen apps get a viewport one status bar short (WebKit bug 301108), leaving a black strip under the tab bar. Fix: a standalone-only `min-height` on `html` in `styles.css`.
@@ -96,6 +103,7 @@ The switch is in the profile (top-right avatar) and applies to that phone only. 
 10. `20261030120000_notification_switches.sql`: pin and chat notifications back on, filtered per person
 11. `20261031120000_buddies_plans_moves.sql`: buddies, mutes, Halloween lineup per stage, plans + reminders (pg_cron job `pingu-reminders`), planned moves, new `crew_sync` (adds `p_prefs`)
 12. `20261101120000_custom_invite_code.sql`: `create_crew` takes an optional `p_code`
+13. `20261102120000_insights.sql`: `app_events`, `night_stats`, `save_night_stats()`, cleanup saves stats first, `crew_sync` takes `p_events`
 
 Plus two fixes she already ran: `supabase/fixes/2026-10-23_push_apikey.sql` and `2026-10-23b_push_key_from_db.sql`.
 

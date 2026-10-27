@@ -31,7 +31,8 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 11. New query again. Paste `supabase/migrations/20261030120000_notification_switches.sql` and **Run**. Pin and chat notifications work again, following each person's switches (paused for phones in low data mode).
 12. New query again. Paste `supabase/migrations/20261031120000_buddies_plans_moves.sql` and **Run**. Buddy up, muting people, the Halloween lineup on every stage, set plans with reminders, and planned moves. The result at the bottom should say `halloween_sets 35` and `reminders_job_ready true`. If it says `false`: **Database → Extensions**, turn on `pg_cron`, then run this file once more. Then redeploy the push function (step 10, last part) so the new notifications go out.
 13. New query again. Paste `supabase/migrations/20261101120000_custom_invite_code.sql` and **Run**. Lets whoever starts a crew pick its invite code (e.g. `halloween-squad`). The result says `custom invite codes ready`.
-14. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+14. New query again. Paste `supabase/migrations/20261102120000_insights.sql` and **Run**. Anonymous stats (Table Editor → `app_events`) and a per-crew summary saved before the 48 h cleanup (`night_stats`). The result says `insights ready`.
+15. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
 
 > Already ran some of these before? Just run the ones you haven't. Each file is safe to run once on top of the previous ones.
 

@@ -175,6 +175,9 @@ export function CrewScreen() {
           Leave
         </button>
       </div>
+      <div style={{ fontSize: 10, lineHeight: 1.4, color: 'var(--color-neutral-600)', textAlign: 'center', padding: '0 12px' }}>
+        PinGü collects anonymous stats to improve the app: no names, no messages.
+      </div>
       {planning && <PlanMoveSheet onClose={() => setPlanning(false)} />}
     </div>
   )
