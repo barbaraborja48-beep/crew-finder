@@ -402,3 +402,8 @@ a { color: var(--color-accent-300); }
 .dj-sheet.fixed > .dj-page, .dj-sheet.fixed .dj-pages > .dj-page { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 .dj-sheet.fixed .dj-row { padding: 10px 12px; margin-bottom: 6px; }
 .dj-sheet.fixed .dj-sheet-top, .dj-sheet.fixed .dj-tabs, .dj-sheet.fixed .dj-dots { flex: none; }
+
+/* A suggested spot, not a pin yet: the dashed ring breathes. */
+.suggest-ring { transform: translateX(-50%); animation: suggest 1.8s ease-in-out infinite; }
+@keyframes suggest { 0%, 100% { opacity: 1; transform: translateX(-50%) scale(1) } 50% { opacity: .55; transform: translateX(-50%) scale(1.12) } }
+@media (prefers-reduced-motion: reduce) { .suggest-ring { animation: none; } }

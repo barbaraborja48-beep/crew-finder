@@ -1,7 +1,7 @@
 // Small view-model helpers shared by the screens.
 import { useEffect, useState } from 'react'
 import { fresh, pinned } from './rules'
-import { latestDots, store, type Checkin, type Member, type Message, type State } from './store'
+import { latestDots, placeTitleShort, store, type Checkin, type Member, type Message, type State } from './store'
 import { ago, HALLOWEEN_ID, STAGE_LOGOS, STATUS, TYPES, where } from './venue'
 import type { Badge } from '../components/common'
 import { activeMoves, groupOf, moveCrew, pendingInvites, shownDots, suggestions, type Move, type Suggestion } from './social'
@@ -48,6 +48,7 @@ export interface CrewRow {
   ageS: number
   where: string
   huddle: { i: number; n: number } // buddies on one pin stand side by side
+  hint: string | null // "Heading to WC" (a planned move that's due) or "Probably at WC" (a friend's guess)
   buddies: string[] // their buddy group (them included), if they're in one
   muted: boolean
 }
@@ -55,6 +56,7 @@ export interface CrewRow {
 /** Everyone except you, freshest first, ghosts last. */
 export function crewRows(s: State, now: number): CrewRow[] {
   const shown = shownDots(latestDots(s.checkins), s.members)
+  const hints = new Map(suggested(s, now).map(sg => [sg.memberId, `${sg.kind === 'move' ? 'Heading to' : 'Probably at'} ${placeTitleShort(store.place(sg.placeId))}`]))
   return s.members
     .filter(m => m.id !== s.session?.memberId)
     .map(m => {
@@ -67,6 +69,7 @@ export function crewRows(s: State, now: number): CrewRow[] {
         huddle: { i: sh?.i ?? 0, n: sh?.n ?? 1 },
         buddies: group.length > 1 ? group : [],
         muted: s.prefs.mutes.includes(m.id),
+        hint: m.ghost ? null : (hints.get(m.id) ?? null),
         live: pinned(dot, now),
         fresh: fresh(dot, now),
         ageS: dot ? (now - dot.born) / 1000 : Infinity,

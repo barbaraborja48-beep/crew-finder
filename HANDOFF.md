@@ -43,6 +43,18 @@ Read this first in a new chat. It covers what the app is, where everything lives
     - **Floor plans:** `public/assets/mondo-p1.webp` / `-p2.webp`, with the VIP tables erased.
 - **Other features:** crew chat (text, location, photos), status and note, ghost mode, SOS (hold the button), ping a friend, meet spot, an iPhone Shortcut for one-touch pins, and an offer to text your spot when a pin is stuck for 30 seconds.
 
+## Added 27 Oct (merged to `main`; SQL 13 given to Barbara)
+
+- **Insights, with names** (Barbara wants to know who did what): `app_events` logs app opened (from the Home Screen or not, which mode), intro tour finished or skipped (cards seen), how long each pin waited for signal (tap to server, with mode and signal level), low data mode switched, lineup opened. Each row has the member's id and name, crew and venue, plus a random id per phone (`pingu-device`). Events wait on the phone (`store.track`, kv `events`, max 100) and ride along with the next `crew_sync` as `p_events`, each with its own id so a resend counts once. An older server without `p_events` makes the phone stop sending them (`eventsOff`) without losing the sync.
+- **Each night is kept** before the 48 h cleanup: `night_stats` (per-crew totals: pins per place and hour, message types, buddies, plans, most-starred sets, mutes, low data, notifications), `night_members` (name, colour, accessory, pins per place), `night_pins` (every pin with its spot) and `night_messages` (every message with its text and photo link). `purge_old_crews()` saves all four first and still deletes on time if saving fails. `select public.save_night_stats()` saves every crew now. These stay until Barbara deletes them in Supabase.
+- Small note at the bottom of the Crew tab: "PinGü stores data for improvement purposes only." (Barbara's wording; the same line goes in the text she sends friends)
+- **Festival map without the poster text:** `public/assets/elrow-map-v2.webp` is the same map with the title, the sitemap legend and the printed stage names blacked out (our own stage labels stay). New file name on purpose: phones cache maps by URL, so an edited file under the old name would never reach them. SQL 13 points the venue at it. The old `elrow-map.webp` is kept for phones that haven't synced yet.
+- **Map height:** the festival map frame ends at its lowest place (no empty band under it). The friends list has a drag handle (both venues): pull it up for a longer list, double-tap to reset, remembered per phone (`pingu-map-split`). When the frame is shorter than the map, the map keeps its size and slides up and down under one finger (`ZoomPan` `ch` prop), so pins and labels stay readable. Club plans: tap-to-pin still lands under the finger (tested).
+- **Suggested spots** ("Let go" guesses, planned moves) are clearer: full colour penguin at 88% opacity, a slowly turning dashed ring and a "?" bubble in the member's colour, the name as "Mar?" in their colour, and a line in the list: "Probably at Bar · Industry City" or "Heading to WC".
+- **Colours:** 17 swatches (two rows of 9 with the wheel): dropped a yellow, the gray, the light orange and the light pink; added a blue, a green and a teal. The last circle is a colour wheel (`input type=color`); very dark picks are lifted to 55% lightness, same hue, so they show on the black map. Label: "Select your PinGü color".
+- **Welcome page:** "Find your crew with" and a big "PinGü!", subtext "Create a new crew or join an existing one with a crew code."
+- A reminder is scheduled in this session for Sun 1 Nov 11:00 UTC to build the Halloween insights dashboard (Halloween crews are deleted ~02:00 Madrid, Tue 3 Nov), with names and messages.
+
 ## Added 26 Oct (merged to `main`; SQL 12 given to Barbara)
 
 - **iPhone bottom gap fixed:** iOS 26 Home Screen apps get a viewport one status bar short (WebKit bug 301108), leaving a black strip under the tab bar. Fix: a standalone-only `min-height` on `html` in `styles.css`.
@@ -96,10 +108,13 @@ The switch is in the profile (top-right avatar) and applies to that phone only. 
 10. `20261030120000_notification_switches.sql`: pin and chat notifications back on, filtered per person
 11. `20261031120000_buddies_plans_moves.sql`: buddies, mutes, Halloween lineup per stage, plans + reminders (pg_cron job `pingu-reminders`), planned moves, new `crew_sync` (adds `p_prefs`)
 12. `20261101120000_custom_invite_code.sql`: `create_crew` takes an optional `p_code`
+13. `20261102120000_insights_and_map.sql`: `app_events`, `night_stats`, `night_members`, `night_pins`, `night_messages`, `save_night_stats()`, cleanup saves the night first, `crew_sync` takes `p_events`, Halloween `map_url` → `elrow-map-v2.webp`
 
 Plus two fixes she already ran: `supabase/fixes/2026-10-23_push_apikey.sql` and `2026-10-23b_push_key_from_db.sql`.
 
 **Status (26 Oct):** 1 to 11 are run and the push function with buddies/moves/reminders is deployed (checked through the Supabase connection, read-only). **12 was just given to her**; until it runs, new crews get a random code. The push function didn't change on 26 Oct.
+
+**Status (27 Oct):** 12 is run (checked: `create_crew(p_name, p_venue, p_code)`). The 27 Oct round is merged and **13 was just given to her**. Until it runs, phones keep their last 100 events and try again each time the app opens and still show the old festival map. No push function change.
 
 ## Open items
 

@@ -10,7 +10,7 @@ import { Penguin } from '../components/Penguin'
 import { activityFor, type Activity } from '../lib/penguin'
 import { fraction } from '../lib/rules'
 import type { State } from '../lib/store'
-import { SocialBanners } from '../components/Social'
+import { SocialBanners, SuggestMark } from '../components/Social'
 import { lineupState } from '../components/DjDisplay'
 import type { DjSet } from '../lib/social'
 
@@ -20,9 +20,11 @@ export function MapScreen() {
   const { ui } = s
   // Multi-floor venues show one floor at a time; everything else is unchanged.
   const floors = s.venue?.floors ?? []
-  // The map takes half the screen on any phone; the friends list below gets the rest.
-  // The map frame grows taller (never wider), with the plan kept centred in it.
+  // The map and the friends list share the screen. Drag the list's handle to give either more room
+  // (remembered on this phone). Left alone: a club plan takes half the screen, a festival map
+  // exactly the venue, with no empty space under it.
   const screenRef = useRef<HTMLDivElement>(null)
+  const [split, setSplit] = useState<number | null>(loadSplit)
   const [box, setBox] = useState({ w: MAP_W, h: 844 })
   useLayoutEffect(() => {
     const el = screenRef.current
@@ -32,11 +34,31 @@ export function MapScreen() {
     return () => ro.disconnect()
   }, [])
   const fv = s.venue && floorView(s.venue, ui.floor)
-  // A club's floor plan sits centred; a festival map stays anchored at the top and stops where
-  // the map image ends (the list sheet tucks 12 px over it), so no black band shows.
-  const mapEnd = fv && !floors.length ? fv.map_h * fv.view_scale + fv.view_oy + 12 : 560
-  const frameH = Math.round(Math.min(560, mapEnd, Math.max(MAP_H, (0.5 * box.h * MAP_W) / Math.max(1, box.w))))
-  const v = fv && { ...fv, view_oy: fv.view_oy + (floors.length ? (frameH - MAP_H) / 2 : 0) }
+  const unit = MAP_W / Math.max(1, box.w) // screen px → map frame units
+  // The map's own height: a club plan as framed; a festival map down to its lowest place
+  // (+ room for the icon), where the venue ends.
+  const natural = !fv || floors.length ? MAP_H : Math.max(200, ...s.places.map(p => toMap(fv, p.x, p.y).y + 24))
+  const wanted = split != null ? split * box.h * unit : floors.length ? Math.max(MAP_H, 0.5 * box.h * unit) : natural
+  const frameH = Math.round(Math.min(floors.length ? 560 : natural, Math.max(MIN_FRAME, wanted)))
+  // Less room than the map needs: the map keeps its size (pins stay readable) and slides
+  // up and down under the finger. More room on a club plan: it sits in the middle.
+  const contentH = Math.max(frameH, natural)
+  const v = fv && { ...fv, view_oy: fv.view_oy + (floors.length && frameH > MAP_H ? (frameH - MAP_H) / 2 : 0) }
+  // Dragging the list's handle: the map gets whatever is above the finger.
+  const drag = useRef<{ y: number; h: number } | null>(null)
+  const onHandleDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    drag.current = { y: e.clientY, h: frameH / unit }
+  }
+  const onHandleMove = (e: React.PointerEvent) => {
+    if (!drag.current) return
+    setSplit(Math.min(0.75, Math.max(0.2, (drag.current.h + e.clientY - drag.current.y) / box.h)))
+  }
+  const onHandleUp = () => {
+    if (!drag.current) return
+    drag.current = null
+    saveSplit(split)
+  }
   const sync = mySync(s, now)
   const rows = crewRows(s, now)
   const mine = store.myShownDot() // with your buddies, if you're in a group
@@ -58,7 +80,7 @@ export function MapScreen() {
     if (!v || !floors.length) return
     const r = e.currentTarget.getBoundingClientRect()
     const x = ((e.clientX - r.left) / r.width) * MAP_W
-    const y = ((e.clientY - r.top) / r.height) * frameH
+    const y = ((e.clientY - r.top) / r.height) * contentH
     const hit = placeAt(s.places, ui.floor, (x - v.view_ox) / v.view_scale, (y - v.view_oy) / v.view_scale)
     store.ui({ areaSel: null })
     if (hit) {
@@ -114,6 +136,7 @@ export function MapScreen() {
         <ZoomPan
           w={MAP_W}
           h={frameH}
+          ch={contentH}
           doubleTap={!floors.length} // on club maps a tap pins you, so no double-tap zoom
           overlay={
             <>
@@ -190,7 +213,7 @@ export function MapScreen() {
                 )}
                 {v && (
                   // Bars, the food truck row and picnic areas at their real size and angle. Tap for a close-up.
-                  <svg width={MAP_W} height={frameH} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
+                  <svg width={MAP_W} height={contentH} style={{ position: 'absolute', inset: 0, overflow: 'visible', pointerEvents: 'none' }}>
                     {areas.filter(a => a.shape && a.shape.kind !== 'zone').map(a => {
                       const here = (meLive && mine!.place_id === a.id) || liveFriends.some(r => r.dot!.place_id === a.id)
                       return (
@@ -259,16 +282,17 @@ export function MapScreen() {
                     key={pg.key}
                     aria-label={pg.mine ? 'You' : pg.name}
                     onClick={() => (pg.mine ? store.ui({ sheet: true }) : store.ui({ findId: pg.member, screen: 'find' }))}
-                    style={{ position: 'absolute', left: pg.x, top: pg.y, zIndex: pg.suggest ? 3 : 4, border: 0, padding: 0, background: 'transparent', cursor: 'pointer', transform: `translate(-50%, -88%) scale(${grow})`, transformOrigin: '50% 88%', opacity: pg.suggest ? 0.5 : 1, filter: pg.suggest ? 'saturate(.6)' : undefined }}
+                    style={{ position: 'absolute', left: pg.x, top: pg.y, zIndex: pg.suggest ? 3 : 4, border: 0, padding: 0, background: 'transparent', cursor: 'pointer', transform: `translate(-50%, -88%) scale(${grow})`, transformOrigin: '50% 88%', opacity: pg.suggest ? 0.88 : 1 }}
                   >
-                    {pg.suggest && <span style={{ position: 'absolute', left: '50%', bottom: '4%', width: 20, height: 8, transform: 'translateX(-50%)', borderRadius: '50%', border: `1px dashed ${pg.color}` }} />}
+                    {/* Not a pin yet: a dashed ring that breathes, and a "?" bubble. */}
+                    {pg.suggest && <SuggestMark color={pg.color} size={26} />}
                     <Penguin color={pg.color} acc={pg.acc} activity={pg.activity} seed={pg.key} size={18} glow={pg.glow} signal={pg.signal} saver={pg.saver} queued={pg.queued} />
                     <span
                       style={{
                         position: 'absolute', left: '50%', ...(labelAbove.has(pg.key) ? { bottom: '100%' } : { top: '92%' }),
                         transform: `translateX(-50%) scale(${Math.min(1, 1.15 / Math.pow(z, 0.75))})`, transformOrigin: labelAbove.has(pg.key) ? '50% 100%' : '50% 0',
                         fontSize: 8, fontWeight: 500, whiteSpace: 'nowrap', pointerEvents: 'none',
-                        color: pg.live ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.32)', textShadow: '0 0 3px #000, 0 0 6px #000',
+                        color: pg.suggest ? pg.color : pg.live ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.32)', textShadow: '0 0 3px #000, 0 0 6px #000',
                       }}
                     >
                       {pg.mine ? 'You' : pg.name}
@@ -283,7 +307,21 @@ export function MapScreen() {
       </Scaled>
 
       <div className="scroll no-scrollbar" style={{ flex: 1, marginTop: -12, position: 'relative', background: 'var(--color-surface)', borderRadius: '24px 24px 0 0', boxShadow: 'var(--shadow-sm)', padding: '8px 20px calc(var(--tabbar-h) + 12px)' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--color-neutral-700)', margin: '0 auto 2px' }} />
+        <div
+          role="separator"
+          aria-label="Drag to resize the map and the list"
+          onPointerDown={onHandleDown}
+          onPointerMove={onHandleMove}
+          onPointerUp={onHandleUp}
+          onPointerCancel={onHandleUp}
+          onDoubleClick={() => {
+            setSplit(null)
+            saveSplit(null)
+          }}
+          style={{ margin: '-8px -20px 2px', padding: '10px 0 8px', touchAction: 'none', cursor: 'ns-resize' }}
+        >
+          <div style={{ width: 40, height: 5, borderRadius: 3, background: 'var(--color-neutral-600)', margin: '0 auto' }} />
+        </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Freshness />
         </div>
@@ -311,6 +349,12 @@ export function MapScreen() {
                 {r.muted && <i aria-hidden className="ph ph-bell-slash" title="Muted" style={{ fontSize: 11, color: 'var(--color-neutral-500)' }} />}
               </span>
               <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-500)' }}>{r.where}</span>
+              {r.hint && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 500, color: r.member.color, marginTop: 1 }}>
+                  <i aria-hidden className="ph-bold ph-question" />
+                  {r.hint}
+                </span>
+              )}
             </span>
             <i aria-hidden className={r.member.ghost ? 'ph ph-ghost' : statusOf(r.member)[0]} style={{ color: 'var(--color-neutral-400)', fontSize: 15 }} />
             <span style={{ width: 34, textAlign: 'right', fontSize: 11, color: 'var(--color-neutral-400)', fontVariantNumeric: 'tabular-nums' }}>{ageLabel(r.ageS)}</span>
@@ -353,6 +397,26 @@ export function MapScreen() {
       )}
     </div>
   )
+}
+
+// The map can't get smaller than this (frame units) when you drag the list up.
+const MIN_FRAME = 170
+const SPLIT_KEY = 'pingu-map-split'
+function loadSplit(): number | null {
+  try {
+    const v = Number(localStorage.getItem(SPLIT_KEY))
+    return v > 0 ? v : null
+  } catch {
+    return null
+  }
+}
+function saveSplit(v: number | null) {
+  try {
+    if (v == null) localStorage.removeItem(SPLIT_KEY)
+    else localStorage.setItem(SPLIT_KEY, String(v))
+  } catch {
+    /* private mode */
+  }
 }
 
 interface MapPenguin {

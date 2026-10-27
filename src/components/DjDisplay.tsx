@@ -1,6 +1,6 @@
 // The DJ screen on the dance floor: who's playing right now, on a slow lava-lamp aura.
 // Runs off the phone's clock (corrected by the server's), so it needs no data at all.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { store, useStore } from '../lib/store'
 import { planTimeline, REMINDER_OPTIONS, reminderLabel, setKey, switchTimes, type DjSet, type PlanItem } from '../lib/social'
@@ -116,6 +116,8 @@ export function DjSheet({ sets: stageSets, now, onClose, stage, startTab }: { se
   const [editing, setEditing] = useState<string | null>(null) // set whose reminder options are open
   const plan = st.prefs.plan
   const pick = (x: DjSet) => plan.find(i => i.k === setKey(x))
+  // Stats: how often the lineup gets opened.
+  useEffect(() => store.track('lineup', undefined, { festival, plan: startTab === 'plan' }), []) // eslint-disable-line react-hooks/exhaustive-deps
   const [premium, setPremium] = useState<null | 'shazam' | 'steps'>(null)
   const open = (f: 'shazam' | 'steps') => {
     store.logFeature(f) // count who wants it

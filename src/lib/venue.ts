@@ -103,8 +103,8 @@ export const ME = '#3bf0ff'
 
 /** Colors friends can pick. Cyan is reserved for "you". */
 export const LASERS = [
-  '#ff3bd4', '#b6ff3b', '#ffc83b', '#ff3b5c', '#ff8a3b', '#a46bff', '#3bffb0', '#3b8bff', '#ff7ad9', '#f3f5fe',
-  '#ffe53b', '#3bff5f', '#d23bff', '#5b4bff', '#ffb38a', '#c4b0ff', '#a3a3b8', '#ffd1e8',
+  '#ff3b5c', '#ff8a3b', '#ffc83b', '#b6ff3b', '#3bff5f', '#22c55e', '#3bffb0', '#14d4c8', '#4cc3ff',
+  '#3b8bff', '#5b4bff', '#a46bff', '#c4b0ff', '#d23bff', '#ff3bd4', '#ff7ad9', '#f3f5fe',
 ]
 
 /** The map frame in the design is 390×346 logical px. */
