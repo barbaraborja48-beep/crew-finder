@@ -10,8 +10,53 @@ import { activityFor } from '../lib/penguin'
 import { SuggestMark } from '../components/Social'
 
 const W = 362
-/** Buddies on one pin stand side by side on the close-up, a name's width apart. */
-const huddleX = (h: { i: number; n: number }) => (h.n > 1 ? (h.i - (h.n - 1) / 2) * 46 : 0)
+/** Buddies on one pin huddle on the close-up: each penguin overlaps its neighbour by about a third. */
+const STEP = 19
+
+/** Where one penguin stands in its huddle; the first one carries the group's names. */
+interface Stand {
+  dx: number
+  dy: number
+  z: number
+  label?: string
+  labelDx?: number
+  hideLabel?: boolean
+}
+const SOLO: Stand = { dx: 0, dy: 0, z: 5 }
+
+interface Spot {
+  id: string
+  group?: string // the pin a buddy group shares
+  i: number // place in the group
+  name: string
+  x: number
+  y: number
+}
+
+/**
+ * Buddies sharing a pin stand as one huddle: the middle one in front, the outer ones a step
+ * back (a bit higher), and a single line of names under them, left to right.
+ */
+function huddleLayout(spots: Spot[]) {
+  const pos = new Map<string, Stand>()
+  const glows: { key: string; x: number; y: number; w: number }[] = []
+  const by = new Map<string, Spot[]>()
+  for (const sp of spots) if (sp.group) by.set(sp.group, [...(by.get(sp.group) ?? []), sp])
+  for (const [key, g] of by) {
+    if (g.length < 2) continue
+    g.sort((a, b) => a.i - b.i)
+    const mid = (g.length - 1) / 2
+    const names = g.map(sp => sp.name)
+    const label = names.length > 3 ? `${names.slice(0, 2).join(', ')} +${names.length - 2}` : names.join(', ')
+    g.forEach((sp, k) => {
+      const dx = (k - mid) * STEP
+      // the first penguin carries the names, moved back under the middle of the huddle
+      pos.set(sp.id, { dx, dy: -Math.abs(k - mid) * 4, z: 10 - Math.round(Math.abs(k - mid) * 2), ...(k === 0 ? { label, labelDx: -dx } : { hideLabel: true }) })
+    })
+    glows.push({ key, x: g[0].x, y: g[0].y, w: (g.length - 1) * STEP })
+  }
+  return { pos, glows }
+}
 const GROUPS: PlaceType[] = ['stage', 'bar', 'food', 'picnic']
 
 /** Close-up floor size: stages are tall, bars and trucks are wide and shallow. */
@@ -232,6 +277,21 @@ export function StageScreen() {
 
   const here = rows.filter(r => r.live && r.dot!.place_id === place.id)
   const meHere = meLive && mine!.place_id === place.id
+  const meH = me && !me.ghost ? myHuddle(s) : { i: 0, n: 1 }
+  const huddles = huddleLayout([
+    ...here.map(r => ({ id: r.member.id, group: r.huddle.n > 1 ? r.dot!.id : undefined, i: r.huddle.i, name: r.member.name, x: toX(r.dot!.nx), y: toY(r.dot!.ny) })),
+    ...(meHere && me ? [{ id: me.id, group: meH.n > 1 ? mine!.id : undefined, i: meH.i, name: 'You', x: toX(mine!.nx), y: toY(mine!.ny) }] : []),
+  ])
+  const at = (id: string) => huddles.pos.get(id) ?? SOLO
+  // The name under a penguin; in a huddle, one line of names under the middle (kept in place on the others so they line up).
+  const nameLine = (id: string, name: string) => {
+    const h = at(id)
+    return (
+      <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000', visibility: h.hideLabel ? 'hidden' : undefined, transform: h.labelDx ? `translateX(${h.labelDx}px)` : undefined }}>
+        {h.label ?? name}
+      </span>
+    )
+  }
   const sent = !!mine && !s.pending[mine.id] && !me?.ghost
   const myLine = meLive ? where(store.place(mine!.place_id), mine!.nx, mine!.ny) : 'Not pinned'
   const mySub = meLive ? `Pinned ${agoLong(ageOf(mine!, now))} · pin again to update` : 'Pin where you are'
@@ -346,10 +406,16 @@ export function StageScreen() {
               )
             })}
 
+            {huddles.glows.map(g => (
+              // Buddies standing together: a soft glow under the huddle, as on the map.
+              <div key={'g' + g.key} style={{ position: 'absolute', left: g.x, top: g.y + 4, width: g.w + 44, height: 14, transform: 'translate(-50%, -50%)', borderRadius: '50%', background: 'radial-gradient(closest-side, color-mix(in srgb, var(--color-accent) 45%, transparent), transparent)', pointerEvents: 'none' }} />
+            ))}
+
             {here.map(r => {
               const d = r.dot!
               const f = fraction(d, now)
               const size = 30 + Math.min(4, d.taps - 1) * 4
+              const h = at(r.member.id)
               return (
                 <button
                   key={r.member.id}
@@ -358,12 +424,10 @@ export function StageScreen() {
                     e.stopPropagation()
                     store.ui({ findId: r.member.id, screen: 'find' })
                   }}
-                  style={{ position: 'absolute', left: toX(d.nx) + huddleX(r.huddle), top: toY(d.ny), transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                  style={{ position: 'absolute', left: toX(d.nx) + h.dx, top: toY(d.ny) + h.dy, zIndex: h.z, transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                 >
                   <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(place.type, r.member.status, r.fresh)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
-                  <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
-                    {r.member.name}
-                  </span>
+                  {nameLine(r.member.id, r.member.name)}
                 </button>
               )
             })}
@@ -371,12 +435,11 @@ export function StageScreen() {
             {meHere && me && (() => {
               const f = fraction(mine!, now)
               const size = 32 + Math.min(4, mine!.taps - 1) * 4
+              const h = at(me.id)
               return (
-                <div style={{ position: 'absolute', left: toX(mine!.nx) + huddleX(me.ghost ? { i: 0, n: 1 } : myHuddle(s)), top: toY(mine!.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ position: 'absolute', left: toX(mine!.nx) + h.dx, top: toY(mine!.ny) + h.dy, zIndex: h.z, transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(place.type, me.status, fresh(mine, now))} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
-                  <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
-                    You
-                  </span>
+                  {nameLine(me.id, 'You')}
                 </div>
               )
             })()}
