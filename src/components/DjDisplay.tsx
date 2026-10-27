@@ -116,7 +116,7 @@ export function DjSheet({ sets: stageSets, now, onClose, stage, startTab }: { se
   const [editing, setEditing] = useState<string | null>(null) // set whose reminder options are open
   const plan = st.prefs.plan
   const pick = (x: DjSet) => plan.find(i => i.k === setKey(x))
-  // Anonymous stats: how often the lineup gets opened.
+  // Stats: how often the lineup gets opened.
   useEffect(() => store.track('lineup', undefined, { festival, plan: startTab === 'plan' }), []) // eslint-disable-line react-hooks/exhaustive-deps
   const [premium, setPremium] = useState<null | 'shazam' | 'steps'>(null)
   const open = (f: 'shazam' | 'steps') => {

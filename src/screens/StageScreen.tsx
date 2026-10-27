@@ -7,6 +7,7 @@ import { useNow, mySync, crewRows, statusOf, myHuddle, suggested, badgeFor } fro
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
 import { Penguin } from '../components/Penguin'
 import { activityFor } from '../lib/penguin'
+import { SuggestMark } from '../components/Social'
 
 const W = 362
 /** Buddies on one pin stand side by side on the close-up, a name's width apart. */
@@ -335,9 +336,12 @@ export function StageScreen() {
               const m = s.members.find(x => x.id === sg.memberId)
               if (!m || m.ghost) return null
               return (
-                <div key={'s' + m.id} style={{ position: 'absolute', left: toX(sg.nx) + (i - 0.5) * 46, top: toY(sg.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.5, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <Penguin color={m.color} acc={m.acc ?? 0} activity="walk" seed={m.id} size={30} glow={0.3} />
-                  <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>{m.id === me?.id ? 'You' : m.name}?</span>
+                <div key={'s' + m.id} style={{ position: 'absolute', left: toX(sg.nx) + (i - 0.5) * 46, top: toY(sg.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.88, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <span style={{ position: 'relative', display: 'block' }}>
+                    <SuggestMark color={m.color} size={40} />
+                    <Penguin color={m.color} acc={m.acc ?? 0} activity="walk" seed={m.id} size={30} glow={0.3} />
+                  </span>
+                  <span style={{ whiteSpace: 'nowrap', font: '600 10px var(--font-body)', color: m.color, textShadow: '0 0 6px #000' }}>{m.id === me?.id ? 'You' : m.name}?</span>
                 </div>
               )
             })}

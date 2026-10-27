@@ -72,6 +72,12 @@ export function CrewScreen() {
                 {buddies.some(b => b.id === r.member.id) && <i aria-hidden className="ph-bold ph-link" title="Buddied with you" style={{ fontSize: 12, color: 'var(--color-accent-300)' }} />}
               </span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--color-neutral-500)' }}>{r.where}</span>
+              {r.hint && (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 500, color: r.member.color, marginTop: 1 }}>
+                  <i aria-hidden className="ph-bold ph-question" />
+                  {r.hint}
+                </span>
+              )}
               {!r.member.ghost && (
                 <span style={{ display: 'block', fontSize: 11, color: 'var(--color-neutral-400)', marginTop: 2 }}>{r.member.note ? `“${r.member.note}”` : statusOf(r.member)[1]}</span>
               )}
@@ -176,7 +182,7 @@ export function CrewScreen() {
         </button>
       </div>
       <div style={{ fontSize: 10, lineHeight: 1.4, color: 'var(--color-neutral-600)', textAlign: 'center', padding: '0 12px' }}>
-        PinGü collects anonymous stats to improve the app: no names, no messages.
+        PinGü keeps names, pins and messages from each night to improve the app.
       </div>
       {planning && <PlanMoveSheet onClose={() => setPlanning(false)} />}
     </div>

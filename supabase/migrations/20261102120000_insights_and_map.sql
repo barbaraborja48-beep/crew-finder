@@ -1,15 +1,20 @@
--- Update 12: insights. Anonymous app events, and a summary of each crew's night that is
--- saved before the 48 h cleanup deletes the crew.
+-- Update 12: insights, and a tidier festival map.
 --
 -- 1. app_events: a few moments the database can't see on its own, sent along with the syncs
 --    phones already make (no extra requests): app opened, intro tour finished or skipped, how
---    long each pin waited for signal, low data mode switched, lineup opened. No names, no
---    member ids, no messages: a kind, a number, a little detail, a random id per phone, and
---    the crew and venue. Only readable from the Supabase dashboard.
--- 2. night_stats: one row per crew with totals (pins per place and hour, message types,
---    buddies, plans, most-starred sets, mutes, low data, notifications). purge_old_crews()
---    now saves it first; select public.save_night_stats() saves every crew right now.
+--    long each pin waited for signal, low data mode switched, lineup opened. Each carries who
+--    (member id and name), the crew and venue. Only readable from the Supabase dashboard.
+-- 2. Saved before the 48 h cleanup deletes a crew, so the night can be looked at later:
+--      night_stats     one row of totals per crew (pins per place and hour, message types,
+--                      buddies, plans, most-starred sets, mutes, low data, notifications)
+--      night_members   who was in it (name, colour, penguin, pins per place)
+--      night_pins      every pin, with the person's name
+--      night_messages  every message, with the sender's (and recipient's) name
+--    purge_old_crews() now saves them first; select public.save_night_stats() saves every
+--    crew right now. Only readable from the Supabase dashboard.
 -- 3. crew_sync takes p_events. Older app versions keep working without it.
+-- 4. The Halloween map without the poster title, legends and "Sitemap" (a new file name, so
+--    phones that saved the old map pick up the new one).
 
 create table if not exists public.app_events (
   id bigint generated always as identity primary key,
@@ -18,8 +23,10 @@ create table if not exists public.app_events (
   kind text not null,
   value double precision,
   meta jsonb,
-  device text,       -- random per phone, not linked to a person
-  crew_id uuid,      -- no link to crews, so events outlive the crew (they hold no names)
+  device text,       -- random per phone
+  member_id uuid,    -- no links: events outlive the crew and its members
+  member_name text,
+  crew_id uuid,
   venue_id uuid
 );
 create index if not exists app_events_kind_at on public.app_events (kind, at);
@@ -49,6 +56,49 @@ create table if not exists public.night_stats (
 );
 alter table public.night_stats enable row level security;
 revoke all on public.night_stats from anon, authenticated;
+
+create table if not exists public.night_members (
+  member_id uuid primary key, -- no links: kept after the crew is deleted
+  crew_id uuid,
+  crew_name text,
+  event text,
+  name text,
+  color text,
+  acc smallint,
+  joined timestamptz,
+  pins int,
+  pins_by_place jsonb,
+  saved_at timestamptz not null default now()
+);
+create table if not exists public.night_pins (
+  id uuid primary key,
+  crew_id uuid,
+  member_id uuid,
+  member_name text,
+  place_id text,
+  nx real,
+  ny real,
+  born timestamptz,
+  first_pinned timestamptz,
+  taps int
+);
+create table if not exists public.night_messages (
+  id uuid primary key,
+  crew_id uuid,
+  member_id uuid,
+  member_name text,
+  type text,
+  text text,
+  photo_url text,
+  place_id text,
+  to_name text,
+  meta jsonb,
+  born timestamptz
+);
+alter table public.night_members enable row level security;
+alter table public.night_pins enable row level security;
+alter table public.night_messages enable row level security;
+revoke all on public.night_members, public.night_pins, public.night_messages from anon, authenticated;
 
 -- Save (or refresh) the totals for one crew, or every crew when called with no argument.
 create or replace function public.save_night_stats(p_crew uuid default null) returns int
@@ -81,6 +131,29 @@ begin
     shared_plans = excluded.shared_plans, stars = excluded.stars, mutes = excluded.mutes, low_data = excluded.low_data,
     notifications = excluded.notifications, saved_at = excluded.saved_at;
   get diagnostics v_saved = row_count;
+
+  insert into night_members as x (member_id, crew_id, crew_name, event, name, color, acc, joined, pins, pins_by_place, saved_at)
+  select m.id, m.crew_id, c.name, v.event_name, m.name, m.color, m.acc, m.created_at,
+         (select count(*) from checkins k where k.member_id = m.id),
+         (select coalesce(jsonb_object_agg(place_id, n), '{}') from (select place_id, count(*) n from checkins where member_id = m.id group by 1) y),
+         now()
+  from members m join crews c on c.id = m.crew_id join venues v on v.id = c.venue_id
+  where p_crew is null or m.crew_id = p_crew
+  on conflict (member_id) do update set name = excluded.name, color = excluded.color, acc = excluded.acc,
+    pins = excluded.pins, pins_by_place = excluded.pins_by_place, saved_at = excluded.saved_at;
+
+  insert into night_pins (id, crew_id, member_id, member_name, place_id, nx, ny, born, first_pinned, taps)
+  select k.id, k.crew_id, k.member_id, m.name, k.place_id, k.nx, k.ny, k.born, k.created_at, k.taps
+  from checkins k join members m on m.id = k.member_id
+  where p_crew is null or k.crew_id = p_crew
+  on conflict (id) do update set place_id = excluded.place_id, nx = excluded.nx, ny = excluded.ny, born = excluded.born, taps = excluded.taps;
+
+  insert into night_messages (id, crew_id, member_id, member_name, type, text, photo_url, place_id, to_name, meta, born)
+  select g.id, g.crew_id, g.member_id, m.name, g.type, g.text, g.photo_url, g.place_id, t.name, g.meta, g.born
+  from messages g join members m on m.id = g.member_id left join members t on t.id = g.to_member
+  where p_crew is null or g.crew_id = p_crew
+  on conflict (id) do nothing;
+
   return v_saved;
 end $$;
 
@@ -198,14 +271,14 @@ begin
     end;
   end if;
 
-  -- anonymous app events: no member, just the crew and venue they happened in
+  -- app events, with who and where they happened
   if jsonb_typeof(p_events) = 'array' then
     begin
-      insert into app_events (eid, at, kind, value, meta, device, crew_id, venue_id)
+      insert into app_events (eid, at, kind, value, meta, device, member_id, member_name, crew_id, venue_id)
       select left(e->>'i', 24), v_now - make_interval(secs => least(greatest(0, coalesce((e->>'a')::double precision, 0)), 6048e5) / 1000),
              left(e->>'k', 24), (e->>'v')::double precision,
              case when jsonb_typeof(e->'m') = 'object' and length((e->'m')::text) <= 300 then e->'m' end,
-             left(e->>'d', 16), m.crew_id, (select venue_id from crews where id = m.crew_id)
+             left(e->>'d', 16), m.id, m.name, m.crew_id, (select venue_id from crews where id = m.crew_id)
       from (select e from jsonb_array_elements(p_events) e limit 50) x
       where e->>'k' is not null
       on conflict (eid) do nothing;
@@ -253,5 +326,8 @@ end $$;
 
 revoke execute on function public.crew_sync from public, anon;
 grant execute on function public.crew_sync to authenticated;
+
+-- 4 ─────────────────────────────────────────────────────────────────────
+update public.venues set map_url = '/assets/elrow-map-v2.webp' where id = 'e1e0a000-0000-4000-8000-000000000001';
 
 select 'insights ready' as result;

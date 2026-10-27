@@ -1,5 +1,6 @@
 // Pinch, drag, double-tap and +/- zoom for a fixed-size layer (the venue map).
 // Works in the layer's own units, so it sits happily inside <Scaled>.
+// The layer can be taller than the frame (ch > h): then it also slides up and down unzoomed.
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 const MIN = 1
@@ -11,17 +12,27 @@ interface View {
   ty: number
 }
 
-export function ZoomPan({ w, h, children, overlay, corner, doubleTap = true }: { w: number; h: number; children: (z: number) => ReactNode; overlay?: ReactNode; corner?: ReactNode; doubleTap?: boolean }) {
+export function ZoomPan({ w, h, ch = h, children, overlay, corner, doubleTap = true }: { w: number; h: number; ch?: number; children: (z: number) => ReactNode; overlay?: ReactNode; corner?: ReactNode; doubleTap?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [view, setView] = useState<View>({ z: 1, tx: 0, ty: 0 })
+  const [view, setView] = useState<View>({ z: 1, tx: 0, ty: Math.min(0, (h - ch) / 2) })
   const [smooth, setSmooth] = useState(false) // animate button / double-tap zooms, not finger moves
   const v = useRef(view)
   v.current = view
 
   const clamp = (z: number, tx: number, ty: number): View => {
     z = Math.min(MAX, Math.max(MIN, z))
-    return { z, tx: Math.min(0, Math.max(w - w * z, tx)), ty: Math.min(0, Math.max(h - h * z, ty)) }
+    return { z, tx: Math.min(0, Math.max(w - w * z, tx)), ty: Math.min(0, Math.max(h - ch * z, ty)) }
   }
+  // The frame got shorter or taller (the list below was dragged): keep the same middle in view.
+  const frame = useRef({ h, ch })
+  useEffect(() => {
+    const f = frame.current
+    frame.current = { h, ch }
+    if (f.h === h && f.ch === ch) return
+    setSmooth(false)
+    setView(c => clamp(c.z, c.tx, c.ty + (h - f.h) / 2 - ((ch - f.ch) * c.z) / 2))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [h, ch])
   /** Screen point → layer units. */
   const local = (cx: number, cy: number) => {
     const r = ref.current!.getBoundingClientRect()
@@ -44,6 +55,8 @@ export function ZoomPan({ w, h, children, overlay, corner, doubleTap = true }: {
   const lastTap = useRef({ t: 0, x: 0, y: 0 })
   const dbl = useRef(doubleTap)
   dbl.current = doubleTap
+  const tall = useRef(ch > h)
+  tall.current = ch > h
 
   useEffect(() => {
     const el = ref.current!
@@ -84,7 +97,7 @@ export function ZoomPan({ w, h, children, overlay, corner, doubleTap = true }: {
         const dx = a.x - s.x
         const dy = a.y - s.y
         if (Math.hypot(dx, dy) * a.k > 6) moved.current = true
-        if (moved.current && v.current.z > 1) {
+        if (moved.current && (v.current.z > 1 || tall.current)) {
           setSmooth(false)
           setView(clamp(s.z, s.tx + dx, s.ty + dy))
         }
@@ -130,7 +143,7 @@ export function ZoomPan({ w, h, children, overlay, corner, doubleTap = true }: {
       el.removeEventListener('gesturechange', stopPageZoom)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [w, h])
+  }, [w, h, ch])
 
   const button = (label: string, icon: string, onClick: () => void) => (
     <button
@@ -157,11 +170,11 @@ export function ZoomPan({ w, h, children, overlay, corner, doubleTap = true }: {
           moved.current = false
         }
       }}
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none' }}
+      style={{ position: 'absolute', inset: 0, overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
     >
       <div
         style={{
-          position: 'absolute', left: 0, top: 0, width: w, height: h,
+          position: 'absolute', left: 0, top: 0, width: w, height: ch,
           transform: `translate(${view.tx}px, ${view.ty}px) scale(${view.z})`, transformOrigin: '0 0',
           transition: smooth ? 'transform .28s ease-out' : 'none',
         }}

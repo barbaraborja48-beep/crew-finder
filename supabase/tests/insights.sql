@@ -7,7 +7,7 @@ insert into t select 'a', (public.join_crew((select v from t where k='code'), 'A
 select set_config('request.jwt.claim.sub', 'bbbbbbbb-0000-4000-8000-0000000000e1', false);
 insert into t select 'b', (public.join_crew((select v from t where k='code'), 'Bea', '#b6ff3b')).id::text;
 
-\echo '--- Events ride along with a sync; no member id is stored'
+\echo '--- Events ride along with a sync, with who sent them'
 select set_config('request.jwt.claim.sub', 'aaaaaaaa-0000-4000-8000-0000000000e1', false);
 select public.crew_sync((select v::uuid from t where k='a'), null, 'x',
   jsonb_build_array(jsonb_build_object('i', 'cccccccc-0000-4000-8000-0000000000e1', 'p', 'brunch', 'x', .5, 'y', .5, 'a', 0, 't', 3)),
@@ -26,7 +26,7 @@ select public.crew_sync((select v::uuid from t where k='b'), null, 'x',
 select public.crew_sync((select v::uuid from t where k='b'), null, 'x', '[]', '[]', null, null)->'rejected' as old_app_rejected_expect_empty;
 select has_table_privilege('app_events', 'select') as app_can_read_events_expect_f;
 reset role;
-select kind, value, meta, device, crew_id is not null as has_crew, venue_id is not null as has_venue, round(extract(epoch from now() - at)) as secs_ago from app_events order by id;
+select kind, value, meta, device, member_name, crew_id is not null as has_crew, venue_id is not null as has_venue, round(extract(epoch from now() - at)) as secs_ago from app_events order by id;
 
 \echo '--- Night summary'
 select public.save_night_stats() >= 1 as saved;
@@ -39,3 +39,7 @@ update crews set ends_at = now() - interval '49 hours' where id = (select crew_i
 select public.purge_old_crews() as crews_deleted_expect_1;
 select pins as pins_kept_expect_2 from night_stats where crew_id = (select crew_id from app_events limit 1);
 select count(*) as events_kept_expect_3 from app_events;
+select string_agg(name || ':' || pins, ', ' order by name) as members_kept_expect_ana_1_bea_1 from night_members;
+select count(*) as pins_kept_expect_2 from night_pins;
+select member_name, type, text as messages_kept from night_messages;
+select map_url as halloween_map from venues where id = 'e1e0a000-0000-4000-8000-000000000001';

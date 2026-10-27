@@ -55,15 +55,12 @@ export function Welcome() {
   return (
     <Shell>
       <div>
-        <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.02em', marginBottom: 10 }}>PinGü</div>
-        <div className="title" style={{ fontSize: 38 }}>
-          Find your people,<br />
-          <span className="dim">even with one bar.</span>
+        <div className="title" style={{ fontSize: 30 }}>
+          <span className="dim">Find your crew with</span>
         </div>
+        <div style={{ font: '600 72px/1 var(--font-body)', letterSpacing: '-.055em', marginTop: 6, textShadow: '0 0 28px color-mix(in srgb, var(--color-accent) 55%, transparent)' }}>PinGü!</div>
       </div>
-      <div style={{ fontSize: 14, color: 'var(--color-neutral-400)', lineHeight: 1.5 }}>
-        Pin where you are and your penguin shows up on your crew’s map. It glows while your pin is fresh and fades as it gets older, so everyone knows how recent it is. No signal? It waits and sends when it can.
-      </div>
+      <div style={{ fontSize: 15, color: 'var(--color-neutral-300)', lineHeight: 1.45 }}>Create a new crew or join an existing one with a crew code.</div>
 
       <div style={{ display: 'flex', gap: 2, padding: 3, borderRadius: 999, boxShadow: 'var(--shadow-sm)', background: 'var(--color-glass)', alignSelf: 'flex-start' }}>
         {([['start', 'Start a crew'], ['code', 'I have a code']] as const).map(([k, l]) => (

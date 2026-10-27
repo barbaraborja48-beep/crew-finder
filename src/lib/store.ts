@@ -134,7 +134,7 @@ function flag(key: string) {
   }
 }
 
-// A random id per phone for the anonymous stats (not linked to a name or a member).
+// A random id per phone for the stats, so two phones of one person count apart.
 const DEVICE_KEY = 'pingu-device'
 function deviceId() {
   try {
@@ -145,7 +145,7 @@ function deviceId() {
     return 'private'
   }
 }
-/** An anonymous app event, waiting to ride along with the next sync. t = when it happened. */
+/** An app event, waiting to ride along with the next sync. t = when it happened. */
 interface AppEvent {
   i: string // its own id: a resend after a lost reply is counted once
   k: string
@@ -480,11 +480,11 @@ class Store {
     this.set({ checkins: {}, messages: {}, members: [], crew: null, ghostDot: null, pending: {}, prefs: initial.prefs, plans: {}, answered: {} })
   }
 
-  // ─── anonymous stats ──────────────────────────────────────────────────
+  // ─── stats ────────────────────────────────────────────────────────────
 
   /**
-   * Note a moment for the anonymous stats (see insights.sql): no name, no messages. It waits
-   * on the phone and rides along with the next sync, so it never costs an extra request.
+   * Note a moment for the stats (see insights_and_map.sql; the server adds who sent it). It
+   * waits on the phone and rides along with the next sync, so it never costs an extra request.
    */
   track(kind: string, value?: number, meta?: Record<string, unknown>) {
     this.events = [...this.events, { i: uuid(), k: kind, v: value, m: meta, t: Date.now() }].slice(-100)
@@ -684,7 +684,7 @@ class Store {
       })
       this.measureSignal(error && isTransient(error, status) ? null : performance.now() - t0)
       if (error && evs.length && (error.code === 'PGRST202' || status === 404)) {
-        // The database doesn't take stats yet (insights.sql): keep them on the phone and resend without.
+        // The database doesn't take stats yet (insights_and_map.sql): keep them on the phone and resend without.
         this.eventsOff = true
         items.forEach(i => this.setPending(i.id, 'queued'))
         this.syncAgain = true

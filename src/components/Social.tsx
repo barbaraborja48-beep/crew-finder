@@ -276,3 +276,13 @@ export function LetGoSheet({ member, onClose }: { member: Member; onClose: () =>
     </Sheet>
   )
 }
+
+/** A suggested spot (a planned move that's due, or a friend's guess): dashed ring + "?". */
+export function SuggestMark({ color, size }: { color: string; size: number }) {
+  return (
+    <>
+      <span className="suggest-ring" style={{ position: 'absolute', left: '50%', bottom: '2%', width: size, height: size * 0.42, borderRadius: '50%', border: `1.5px dashed ${color}`, boxShadow: `0 0 8px -1px ${color}` }} />
+      <span style={{ position: 'absolute', right: -size * 0.18, top: -size * 0.08, width: size * 0.42, height: size * 0.42, borderRadius: '50%', background: color, color: '#000', font: `700 ${size * 0.3}px/1 var(--font-body)`, display: 'grid', placeItems: 'center', boxShadow: '0 0 0 1px #000' }}>?</span>
+    </>
+  )
+}
