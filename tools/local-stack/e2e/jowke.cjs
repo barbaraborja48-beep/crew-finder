@@ -83,7 +83,7 @@ const lastPin = async name => (await sql(`select p.name, p.near, c.nx, c.ny, c.p
       }
     }
   check(named === 15, `all 15 cells pin with their own name (${named})`)
-  check(await B.getByText('back back right', { exact: true }).isVisible(), 'cells are labelled like Sala But')
+  check((await B.getByText('back back right', { exact: true }).count()) === 0, 'no names written in the cells')
   await B.getByRole('button', { name: 'Bar', exact: true }).first().click()
   await B.waitForTimeout(1500)
   const byBar = await B.getByText(/^Dance floor · /).first().textContent()

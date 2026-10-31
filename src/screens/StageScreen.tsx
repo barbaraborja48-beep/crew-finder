@@ -121,7 +121,7 @@ const FAN_SPOTS: { id: string; label: string; icon: string; style: React.CSSProp
 /**
  * The open-air floor (Mondo Krystal at Jowke) drawn like Sala But's: DJ at the top, Barbara's rows
  * (front front … back back: her rings around the DJ, unrolled) curving across, her three columns,
- * and buttons around the edge. The small bar by the DJ is a "Bar" button on the left that pins you
+ * and buttons around the edge. No names in the cells (she asked); you see yours once pinned. The small bar by the DJ is a "Bar" button on the left that pins you
  * on the floor there ("front left · by bar").
  */
 function GridFloor({ sh, h, places }: { sh: FanShape; h: number; places: Place[] }) {
@@ -129,10 +129,6 @@ function GridFloor({ sh, h, places }: { sh: FanShape; h: number; places: Place[]
   const n = sh.rows.length
   const cyan = 'color-mix(in srgb, #3bf0ff 60%, transparent)'
   const line = (d: number) => `M${Array.from({ length: 21 }, (_, i) => i / 20).map(x => `${x * W},${gridY(g, x, d) * h}`).join(' L')}`
-  const cols = ['left', 'middle', 'right']
-  const tag = (text: string, x: number, y: number) => (
-    <div key={text} style={{ position: 'absolute', left: `${x * 100}%`, top: y * h, transform: 'translate(-50%, -50%)', font: '500 9px var(--font-body)', color: 'rgba(59,240,255,.5)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>{text}</div>
-  )
   const pill = (key: string, label: string, icon: string, style: React.CSSProperties, onClick: () => void) => (
     <button
       key={key}
@@ -154,7 +150,6 @@ function GridFloor({ sh, h, places }: { sh: FanShape; h: number; places: Place[]
         <line x1={W / 3} y1={0} x2={W / 3} y2={h} stroke={cyan} strokeWidth={1.5} />
         <line x1={(2 * W) / 3} y1={0} x2={(2 * W) / 3} y2={h} stroke={cyan} strokeWidth={1.5} />
       </svg>
-      {sh.rows.flatMap((row, i) => cols.map((col, j) => tag(`${row} ${col}`, (j + 0.5) / 3, gridY(g, (j + 0.5) / 3, (i + 0.5) / n))))}
       {byBar &&
         // between the front and center rows, so it doesn't sit on their names
         pill('by-bar', 'Bar', 'ph ph-martini', { left: 8, top: gridY(g, 0.05, 2 / n) * h }, () => {
