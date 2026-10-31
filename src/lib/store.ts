@@ -1250,6 +1250,11 @@ class Store {
     const names = this.state.members.filter(m => withIds.includes(m.id)).map(m => m.name).join(', ')
     this.toast(mins ? `${spot} in ${mins} min · told ${names}` : `Meet ${names} at ${spot}`, 'ph-bold ph-path')
   }
+  /** At the door: "is arriving in 10 minutes" / "is leaving now", for the whole crew. */
+  announceEta(kind: 'arriving' | 'leaving', mins: number) {
+    this.addMessage({ type: 'status', text: `is ${kind} ${mins ? `in ${mins} minutes` : 'now'}` })
+    this.toast(`Told the crew you’re ${kind}${mins ? ` in ${mins} min` : ''}`, kind === 'arriving' ? 'ph ph-sign-in' : 'ph ph-sign-out')
+  }
   cancelMove(mv: Move) {
     this.addMessage({ type: 'move', text: 'cancelled the move', meta: { cancel: mv.id } })
   }

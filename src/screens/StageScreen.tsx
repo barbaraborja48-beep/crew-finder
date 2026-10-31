@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
-import { agoLong, CORNER, hasCloseUp, isLine, placeTitle, rowDip, TYPES, where, type Place, type PlaceType, type SquareShape } from '../lib/venue'
+import { agoLong, CORNER, hasCloseUp, isLine, mapPos, placeAt, placeTitle, rowDip, TYPES, where, type FanShape, type Place, type PlaceType, type SquareShape, type Venue } from '../lib/venue'
 import { DjDisplay, DjSheet } from '../components/DjDisplay'
 import { useNow, mySync, crewRows, statusOf, myHuddle, suggested, badgeFor } from '../lib/view'
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
@@ -104,10 +104,67 @@ function ClubFloor({ sh, h, places }: { sh: SquareShape; h: number; places: Plac
   )
 }
 
+/** Image px of a pin (any place), for the open-air close-up, which is a piece of the map itself. */
+const imgPos = (v: Venue, p: Place, nx: number, ny: number) => mapPos({ ...v, view_scale: 1, view_ox: 0, view_oy: 0 }, p, nx, ny)
+
+/**
+ * An open-air dance floor (Mondo Krystal at Jowke): the real render, cut to the floor, with the
+ * rows as rings around the DJ and the columns as lines out from it, like Barbara's drawing.
+ * Bars on it are labelled; a tap on one pins you at that bar.
+ */
+function FanFloor({ sh, h, v, places }: { sh: FanShape; h: number; v: Venue; places: Place[] }) {
+  const k = W / sh.w
+  const [cx, cy] = [(sh.djx - sh.x) * k, (sh.djy - sh.y) * k]
+  const cyan = 'color-mix(in srgb, #3bf0ff 70%, transparent)'
+  const poly = sh.poly.map(([x, y]) => `${(x - sh.x) * k},${(y - sh.y) * k}`).join(' ')
+  const at = (r: number, deg: number) => [cx + r * k * Math.cos((deg * Math.PI) / 180), cy + r * k * Math.sin((deg * Math.PI) / 180)]
+  const inner = [sh.radii[0] * 0.6, ...sh.radii]
+  const label = (text: string, [x, y]: number[], strong = false) => (
+    <div key={text + x} style={{ position: 'absolute', left: x, top: y, transform: 'translate(-50%, -50%)', font: `${strong ? 600 : 500} 9px var(--font-body)`, color: '#bdfbff', padding: '2px 6px', borderRadius: 999, background: 'rgba(0,0,0,.55)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>{text}</div>
+  )
+  const bars = places.filter(p => p.type === 'bar' && p.shape?.kind === 'zone' && p.x >= sh.x && p.x <= sh.x + sh.w && p.y >= sh.y && p.y <= sh.y + sh.h)
+  return (
+    <>
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: `url(${v.map_url}) ${-sh.x * k}px ${-sh.y * k}px / ${v.map_w * k}px auto no-repeat`, filter: 'brightness(.85)' }} />
+      <svg width={W} height={h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+        <defs>
+          <clipPath id="fan-floor">
+            <polygon points={poly} />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#fan-floor)" fill="none" stroke={cyan} strokeWidth={1.6} strokeDasharray="2 4" strokeLinecap="round">
+          {/* rings around the front of the booth (not behind it), lines out from its edge */}
+          {sh.radii.map(r => {
+            const [[x0, y0], [x1, y1]] = [at(r, -20), at(r, 200)]
+            return <path key={r} d={`M${x0},${y0} A${r * k},${r * k} 0 1 1 ${x1},${y1}`} />
+          })}
+          {sh.cols.map(a => {
+            const [[x0, y0], [x1, y1]] = [at(sh.radii[0] * 0.6, a), at(2000, a)]
+            return <line key={a} x1={x0} y1={y0} x2={x1} y2={y1} />
+          })}
+        </g>
+      </svg>
+      {sh.rows.map((row, i) => label(row, at(i < sh.radii.length ? (inner[i] + inner[i + 1]) / 2 : sh.radii[i - 1] + 55, sh.cols[0] - 10)))}
+      {label('left', at(sh.radii[sh.radii.length - 1] - 30, 112), true)}
+      {label('middle', at(sh.radii[sh.radii.length - 1] - 10, (sh.cols[0] + sh.cols[1]) / 2), true)}
+      {label('right', at(sh.radii[sh.radii.length - 1] - 40, 35), true)}
+      {bars.map(b => {
+        const pt = imgPos(v, b, 0.5, 0.5)
+        return (
+          <div key={b.id} style={{ position: 'absolute', left: (pt.x - sh.x) * k, top: (pt.y - sh.y) * k, transform: 'translate(-50%, -50%)', pointerEvents: 'none', height: 22, padding: '0 8px', borderRadius: 999, background: 'rgba(10,10,16,.85)', color: '#fff', boxShadow: '0 0 0 1px var(--color-accent-600)', font: '500 10px var(--font-body)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <i aria-hidden className="ph ph-martini" />
+            Bar
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
 /** What's drawn on the floor: the real thing at its relative size, plus zone guides. */
 function FloorArt({ p, h, maxLen }: { p: Place; h: number; maxLen: number }) {
   const sh = p.shape
-  if (!sh || sh.kind === 'square' || sh.kind === 'zone')
+  if (!sh || sh.kind === 'square' || sh.kind === 'zone' || sh.kind === 'fan')
     return (
       <>
         <VLine at="33.3%" /><VLine at="66.6%" /><HLine at="33.3%" /><HLine at="66.6%" />
@@ -207,12 +264,15 @@ export function StageScreen() {
   if (!place) return <div className="screen" />
   // Club dance floors (Mondo) get the crowd's-eye layout with the DJ screen on top.
   const sq = place.shape?.kind === 'square' ? place.shape : null
+  // The open-air floor (Jowke) is a piece of the map itself, so it keeps the map's proportions.
+  const fan = place.shape?.kind === 'fan' && s.venue ? place.shape : null
+  const club = !!(sq || fan)
   // Stage floors (the club's and every festival stage) fill the screen down to the footer, whatever
   // the phone, so they're all the same height and nothing hides under the tab bar.
-  const H = place.type === 'stage' && fitH ? Math.min(760, Math.max(sq ? 330 : 300, fitH)) : floorHeight(place)
+  const H = fan ? Math.round((W * fan.h) / fan.w) : place.type === 'stage' && fitH ? Math.min(760, Math.max(sq ? 330 : 300, fitH)) : floorHeight(place)
   // Festival lineups name each set's stage; a club's single lineup belongs to its dance floor.
-  const lineup = (s.venue?.lineup ?? []).filter(x => (x.stage ? x.stage === place.id : !!sq))
-  const festivalDj = !sq && place.type === 'stage' && lineup.length > 0
+  const lineup = (s.venue?.lineup ?? []).filter(x => (x.stage ? x.stage === place.id : club))
+  const festivalDj = !club && place.type === 'stage' && lineup.length > 0
   const toX = (nx: number) => nx * W
   const toY = (ny: number) => ny * H
   const maxLen = Math.max(1, ...s.places.map(p => (p.shape && isLine(p.shape) && p.shape.kind === 'counter' ? p.shape.len : 0)))
@@ -225,13 +285,26 @@ export function StageScreen() {
     const [x, y] = [((e.clientX - r.left) / r.width) * W, ((e.clientY - r.top) / r.height) * H]
     const nx = Math.min(1, Math.max(0, x / W))
     const ny = Math.min(1, Math.max(0, y / H))
-    store.checkIn(place.id, nx, ny)
+    // Open-air floor: the bars and the path around it are on the picture too, so pin wherever it lands.
+    const hit = fan && placeAt(s.places, s.ui.floor, fan.x + nx * fan.w, fan.y + ny * fan.h)
+    if (hit) store.checkIn(hit.place.id, hit.nx, hit.ny, false, hit.place.id !== place.id)
+    else store.checkIn(place.id, nx, ny)
     setRipple({ x: toX(nx), y: toY(ny), k: Date.now() })
     navigator.vibrate?.(15)
   }
 
-  const here = rows.filter(r => r.live && r.dot!.place_id === place.id)
-  const meHere = meLive && mine!.place_id === place.id
+  // Where a pin sits on this close-up (0–1), or null if it isn't on it. The open-air floor shows
+  // everyone standing on that piece of the map (the bars on it too).
+  const spotOf = (placeId: string, nx: number, ny: number) => {
+    if (!fan) return placeId === place.id ? { nx, ny } : null
+    const p = store.place(placeId)
+    if (!p) return null
+    const pt = imgPos(s.venue!, p, nx, ny)
+    const [fx, fy] = [(pt.x - fan.x) / fan.w, (pt.y - fan.y) / fan.h]
+    return fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1 ? { nx: fx, ny: fy } : null
+  }
+  const here = rows.filter(r => r.live && spotOf(r.dot!.place_id, r.dot!.nx, r.dot!.ny))
+  const meHere = meLive && !!spotOf(mine!.place_id, mine!.nx, mine!.ny)
   const sent = !!mine && !s.pending[mine.id] && !me?.ghost
   const myLine = meLive ? where(store.place(mine!.place_id), mine!.nx, mine!.ny) : 'Not pinned'
   const mySub = meLive ? `Pinned ${agoLong(ageOf(mine!, now))} · pin again to update` : 'Pin where you are'
@@ -244,7 +317,7 @@ export function StageScreen() {
           <i aria-hidden className="ph ph-caret-left" />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {sq ? (
+          {club ? (
             // Club: just the night's name, like the layout guide
             <div className="title" style={{ fontSize: 24 }}>
               {(s.venue?.event_name ?? '').split(' ')[0]} <span className="dim">{(s.venue?.event_name ?? '').split(' ').slice(1).join(' ')}</span>
@@ -302,11 +375,16 @@ export function StageScreen() {
       )}
 
       <div style={{ margin: '0 14px' }}>
+        {fan && lineup.length > 0 && (
+          <div style={{ marginBottom: 6 }}>
+            <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} round fit />
+          </div>
+        )}
         {sq && lineup.length > 0 && (
           <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
             <SideTile id="m-wc1" icon="ph ph-toilet" label="WC" places={s.places} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} />
+              <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} fit />
             </div>
             <SideTile id="m-balcon" icon="ph ph-stairs" label="I’m upstairs" places={s.places} />
           </div>
@@ -316,10 +394,10 @@ export function StageScreen() {
             <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} round />
           </div>
         )}
-        {place.type === 'stage' && !(sq && lineup.length > 0) && (
+        {place.type === 'stage' && !(club && lineup.length > 0) && (
           <div style={{ height: 28, borderRadius: 'var(--radius-md) var(--radius-md) 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10, letterSpacing: '.16em', color: 'var(--color-accent-200)', background: 'linear-gradient(180deg, var(--color-accent-800), transparent)', borderBottom: '1.5px solid var(--color-accent-300)', boxShadow: '0 6px 24px -10px var(--color-accent)' }}>
             <i aria-hidden className="ph ph-speaker-hifi" />
-            {place.floor ? 'DJ BOOTH' : 'STAGE'}
+            {place.floor || fan ? 'DJ BOOTH' : 'STAGE'}
           </div>
         )}
         <Scaled w={W} h={H}>
@@ -329,7 +407,7 @@ export function StageScreen() {
             style={{ position: 'absolute', inset: 0, cursor: 'crosshair', overflow: 'hidden', background: 'radial-gradient(120% 55% at 50% 0%, color-mix(in srgb, var(--color-accent) 10%, transparent), transparent 70%)', borderRadius: place.type === 'stage' ? '0 0 var(--radius-lg) var(--radius-lg)' : 'var(--radius-lg)', boxShadow: 'var(--shadow-sm)' }}
           >
             <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backgroundImage: 'linear-gradient(var(--color-neutral-900) 1px, transparent 1px), linear-gradient(90deg, var(--color-neutral-900) 1px, transparent 1px)', backgroundSize: '22px 22px', opacity: 0.55 }} />
-            {sq ? <ClubFloor sh={sq} h={H} places={s.places} /> : <FloorArt p={place} h={H} maxLen={maxLen} />}
+            {fan ? <FanFloor sh={fan} h={H} v={s.venue!} places={s.places} /> : sq ? <ClubFloor sh={sq} h={H} places={s.places} /> : <FloorArt p={place} h={H} maxLen={maxLen} />}
 
             {suggested(s, now).filter(sg => sg.placeId === place.id).map((sg, i) => {
               // Faded: where someone's probably heading (a planned move, or a friend's guess).
@@ -358,9 +436,9 @@ export function StageScreen() {
                     e.stopPropagation()
                     store.ui({ findId: r.member.id, screen: 'find' })
                   }}
-                  style={{ position: 'absolute', left: toX(d.nx) + huddleX(r.huddle), top: toY(d.ny), transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                  style={{ position: 'absolute', left: toX(spotOf(d.place_id, d.nx, d.ny)!.nx) + huddleX(r.huddle), top: toY(spotOf(d.place_id, d.nx, d.ny)!.ny), transform: 'translate(-50%, -80%)', border: 0, padding: 0, background: 'transparent', cursor: 'pointer', opacity: dotOpacity(f) * 0.4 + 0.6, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                 >
-                  <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(place.type, r.member.status, r.fresh)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
+                  <Penguin color={r.member.color} acc={r.member.acc ?? 0} activity={activityFor(store.place(d.place_id)?.type, r.member.status, r.fresh)} seed={r.member.id} size={size} glow={f} signal={r.member.net ?? null} saver={!!r.member.saver} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
                     {r.member.name}
                   </span>
@@ -372,8 +450,8 @@ export function StageScreen() {
               const f = fraction(mine!, now)
               const size = 32 + Math.min(4, mine!.taps - 1) * 4
               return (
-                <div style={{ position: 'absolute', left: toX(mine!.nx) + huddleX(me.ghost ? { i: 0, n: 1 } : myHuddle(s)), top: toY(mine!.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(place.type, me.status, fresh(mine, now))} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
+                <div style={{ position: 'absolute', left: toX(spotOf(mine!.place_id, mine!.nx, mine!.ny)!.nx) + huddleX(me.ghost ? { i: 0, n: 1 } : myHuddle(s)), top: toY(spotOf(mine!.place_id, mine!.nx, mine!.ny)!.ny), transform: 'translate(-50%, -80%)', pointerEvents: 'none', opacity: 0.6 + 0.4 * f, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <Penguin color={me.color} acc={me.acc ?? 0} activity={activityFor(store.place(mine!.place_id)?.type, me.status, fresh(mine, now))} seed={me.id} size={size} glow={f} signal={s.myNet} saver={s.dataSaver} queued={!sent} />
                   <span style={{ whiteSpace: 'nowrap', font: '500 10px var(--font-body)', color: '#fff', textShadow: '0 0 6px #000' }}>
                     You
                   </span>
@@ -390,6 +468,25 @@ export function StageScreen() {
             )}
           </div>
         </Scaled>
+        {fan && (() => {
+          // Open-air floor: the way inside, like the tile under the floor in Barbara's drawing.
+          const rest = s.places.find(p => p.type === 'rest')
+          return rest && (
+            <button
+              onClick={() => {
+                // by the rest area's own icon, not on the bar in the middle of the room
+                const sh = rest.shape?.kind === 'zone' ? rest.shape : null
+                const j = () => (Math.random() - 0.5) * 0.08
+                if (sh) store.checkIn(rest.id, (rest.x - sh.cx) / sh.w + 0.5 + j(), (rest.y - sh.cy) / sh.h + 0.5 + j(), true, true)
+                else pinSpot(rest.id)
+              }}
+              style={{ width: '100%', marginTop: 6, height: 46, border: 0, cursor: 'pointer', borderRadius: 'var(--radius-md)', background: 'rgba(16,16,24,.95)', color: '#fff', boxShadow: 'inset 0 0 0 1px var(--color-accent-700), 0 0 14px -6px var(--color-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, font: '500 13px var(--font-body)' }}
+            >
+              <i aria-hidden className={TYPES.rest[1]} style={{ fontSize: 18 }} />
+              {rest.name}
+            </button>
+          )
+        })()}
       </div>
 
       <div ref={footRef}>

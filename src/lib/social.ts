@@ -172,6 +172,7 @@ export interface DjSet {
   start: string // ISO with offset
   end: string
   stage?: string // festival lineups: which stage
+  note?: string // "extended set", "vinyl set": shown small next to the times
 }
 
 /** One pick: k = "stage|start", r = reminder minutes before (null = none), f = switch time for a clash. */

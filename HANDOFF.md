@@ -1,6 +1,6 @@
 # PinGü handoff
 
-Read this first in a new chat. It covers what the app is, where everything lives, how Barbara likes to work, what's done, and what's still open (as of 30 Oct 2026, the day before Halloween Takeover). Start with **Where we left off**.
+Read this first in a new chat. It covers what the app is, where everything lives, how Barbara likes to work, what's done, and what's still open (as of 31 Oct 2026, Halloween Takeover day). Start with **Where we left off**.
 
 ## Who you're working with
 
@@ -13,11 +13,13 @@ Read this first in a new chat. It covers what the app is, where everything lives
   - **Venue changes stay venue-specific.** When she asks for changes to Mondo Disko, the Halloween map must not change. She was upset once when it looked like it might, so say explicitly that the other venue is untouched.
 - Every SQL change means she has to paste a file into Supabase. Always give her the direct GitHub link to the file on `main`, and say which order to run files in.
 
-## Where we left off (30 Oct)
+## Where we left off (31 Oct)
 
-Everything on `main` is live and SQL 1 to 13 are run. Halloween Takeover is Sat 31 Oct.
+Everything on `main` is live and SQL 1 to 13 are run. Halloween Takeover, Mondo Krystal at Jowke and the Mondo afterparty at Sala But are all Sat 31 Oct.
 
-1. **Waiting for Barbara's "go": branch `pingu-huddle`.** Buddies on any close-up (Halloween stages, bars, food, picnic; Mondo's dance floor) huddle 19 px apart, middle one in front, with one name line ("Lara, Mar, You") and a soft glow, instead of standing 46 px apart with a name each. Preview sent, every flow passes (`e2e/huddle.cjs` on that branch). On go: `git merge --no-ff pingu-huddle` into `main` and push. No SQL, no push function change, main map untouched.
+0. **Waiting for Barbara's "go": branch `mondo-jowke`** (Mondo Krystal at Terraza Jowke as a third venue, plus set times; see **Added 31 Oct** below). Preview sent. On go: `git merge --no-ff mondo-jowke` into `main`, push, and give her the `main` link to `supabase/migrations/20261103120000_mondo_krystal_jowke.sql` as **SQL 14** (result `mondo krystal ready`; safe to run twice). Best order: SQL 14 first, then the app. The live app ignores the new venue and column (it only shows Sala But's new set times a little earlier); the new app lists Jowke from `VENUES` in code, so without SQL 14 "Start a crew" at Jowke would fail. No push function change.
+   - **Fabrik's Halloween map: not started.** Barbara sent only the Jowke maps. Hallowfest 2026 at Fabrik (Humanes) is Sat 31 Oct 17:00 to about 06:00, Charlotte de Witte; rooms per one listing: CODE (Main Room), Nexus (Área 19), XTREME (Satélite), LOOP and La Resistencia (Crystal 360º). No event map found online, and the container can't open mondodisko.es / feverup.com. Ask her for the Hallowfest map (Instagram or the ticket email).
+1. **Waiting for Barbara's "go": branch `pingu-huddle`.** Buddies on any close-up (Halloween stages, bars, food, picnic; Mondo's dance floor) huddle 19 px apart, middle one in front, with one name line ("Lara, Mar, You") and a soft glow, instead of standing 46 px apart with a name each. Preview sent, every flow passes (`e2e/huddle.cjs` on that branch). On go: `git merge --no-ff pingu-huddle` into `main` and push. No SQL, no push function change, main map untouched. **If `mondo-jowke` is merged first**, the two conflict in `StageScreen.tsx` (both move penguins on the Pin page): use branch `pingu-huddle-jowke`, which is that merge already resolved and tested (`huddle.cjs` and `jowke.cjs` both pass on it), e.g. `git merge --no-ff pingu-huddle-jowke`.
 2. **New address `clubpinguu.xyz`** (bought 27 Oct on Vercel, $11.25 a year, auto-renews). Attached to crew-finder: `clubpinguu.xyz` forwards (308) to `www.clubpinguu.xyz`, Vercel runs the DNS, registrant contact verified. At 16:15 UTC on 27 Oct the www address gave `ERR_CONNECTION_CLOSED` just after DNS went live, most likely the HTTPS certificate still being issued. **Confirm it opens on her phone.** If not, ask for a screenshot of Vercel → crew-finder → Settings → Domains. Keep `crew-finder-xi.vercel.app` working and don't redirect it: Home Screen apps belong to their address, so anyone who installed from the old one has to add the new one, join again and turn notifications back on.
 3. **Text for friends** (the last line is her wording; she fills in the crew code, and the link once the new address works):
    > 🐧 **Meet PinGü**, our app for finding each other at Halloween Takeover, even with one bar of signal. Tap where you are and your penguin pops up on everyone's map.
@@ -66,6 +68,19 @@ Everything on `main` is live and SQL 1 to 13 are run. Halloween Takeover is Sat 
     - **DJ screen:** lava-lamp aura, NOW PLAYING / UP NEXT, runs off the phone clock. Tap it for the lineup, then swipe to page 2 for the countdown, Shazam and Steps. Shazam and Steps both open a "Coming in PinGü Premium" screen with a 5-star rating and comments.
     - **Floor plans:** `public/assets/mondo-p1.webp` / `-p2.webp`, with the VIP tables erased.
 - **Other features:** crew chat (text, location, photos), status and note, ghost mode, SOS (hold the button), ping a friend, meet spot, an iPhone Shortcut for one-touch pins, and an offer to text your spot when a pin is stuck for 30 seconds.
+
+## Added 31 Oct (branch `mondo-jowke`, not merged; SQL 14 not run)
+
+- **Mondo Krystal at Terraza Jowke** (Alcorcón), the open-air Mondo series. Venue `…0003`, `event_end` Sun 1 Nov 23:00 so one crew covers both Halloween days (31 Oct and 1 Nov). Third card on the welcome page ("Terraza Jowke · open air").
+- **Map:** `public/assets/jowke-map.webp` (714×2000, 108 KB), Barbara's 3D render turned upright so the DJ is at the top (matching her dance-floor drawing). The red pins she'd drawn were removed (patch fill), and the pool is covered over as dance floor (she said it's covered on event nights). It's taller than the screen, so it opens on the dance floor and slides under one finger (`ZoomPan` `top` prop, only for tall club plans, so Sala But behaves as before).
+- **Tap anywhere** like Sala But. Spots: Dance floor, Bar along the slanted wall (zones can now have an `angle`), Bar by the DJ booth, Inside / rest area (new place type `rest`), Bar and WC inside, WC / water on the terrace, Outside, Terrace and Walkway as fallbacks. Taps on the empty space around the building say "Tap inside the venue" and don't pin.
+- **Closed rooms:** `venues.closed` (new column, list of image rectangles): the two rooms at the far end are hatched "closed off" and a tap there says "That part is closed off tonight".
+- **Entrance = Arriving / leaving:** a pill at the entrance (zone with `door: true`) opens a sheet: Arriving or Leaving, Now / 5 / 10 / 15 / 20 / 30 min, "Tell the crew". It sends a `status` message `is arriving in 10 minutes`, so chat shows "Barbara is arriving in 10 minutes" and the crew gets a notification under "Pin notifications" (title = name). It doesn't pin you. No push function change.
+- **Pin page (open-air floor):** the real render cut to the dance floor (shape kind `fan`), rows as dashed rings around the DJ (front front, front, center, back, back back) and columns as two lines out from the booth (left, middle, right), measured from her drawing. Tapping a bar on it pins that bar; everyone standing on that part of the map shows. "Inside / rest area" tile under the floor (pins by the armchair icon, not on the inside bar). DJ screen on top.
+- **Set times** (from Mondo's "Horarios" post): Jowke 15:00 DJ Swisherman, 17:00 The Hacker, 18:30 RUIZ OSC1, 20:00 to 23:00 Jeff Mills (extended set). **Sala But afterparty** replaces the old 24/25 Oct lineup: 00:00 DJ Swisherman (vinyl), 01:30 The Hacker, 03:00 Gerardo Niva, 04:30 to 06:00 RUIZ OSC1 (vinyl). Lineup entries can carry a `note` ("extended set", "vinyl set") shown small next to the times. On the two Mondo venues a DJ name that's too long for the screen now shrinks instead of being cut off (`DjDisplay` `fit`); Halloween stage screens are unchanged.
+- **Untouched:** Halloween Takeover (map, places, lineup, screens). Sala But's map and spots are unchanged; only its lineup changed. Pixel check: Mondo map and P2 identical to `main`; the Pin page and lineup differ only in the DJ screen text.
+- **Tests:** `src/lib/venue.test.ts` (rings, columns, angled bar, closed rooms, Sala But zones as before), 30 unit tests in all. `tools/local-stack/e2e/jowke.cjs` (three phones: tap-to-pin, off-venue tap, long bar, rest tile, rows, entrance sheet + notification + chat, closed rooms, both DJ screens). Halloween, Mondo, Mondo split, insights-map and polish flows all pass on the branch. The Mondo e2e scripts now pick "Mondo Disko" (plain "Mondo" matches two venues).
+- **Tools gotcha:** `start.sh` uses `pkill -f`; run it in its own command with output to a file (`bash start.sh > log 2>&1`), never piped into `tail`, or the call hangs or kills itself. Postgres/PostgREST/shim/Deno setup took about 5 minutes from `tools/local-stack/README.md` (PostgREST from GitHub releases and Deno via npm both downloaded fine).
 
 ## Added 27 Oct (merged to `main`; SQL 13 run)
 
@@ -133,6 +148,7 @@ The switch is in the profile (top-right avatar) and applies to that phone only. 
 11. `20261031120000_buddies_plans_moves.sql`: buddies, mutes, Halloween lineup per stage, plans + reminders (pg_cron job `pingu-reminders`), planned moves, new `crew_sync` (adds `p_prefs`)
 12. `20261101120000_custom_invite_code.sql`: `create_crew` takes an optional `p_code`
 13. `20261102120000_insights_and_map.sql`: `app_events`, `night_stats`, `night_members`, `night_pins`, `night_messages`, `save_night_stats()`, cleanup saves the night first, `crew_sync` takes `p_events`, Halloween `map_url` → `elrow-map-v2.webp`
+14. `20261103120000_mondo_krystal_jowke.sql` (branch `mondo-jowke`): `venues.closed`, place type `rest`, Mondo Krystal at Terraza Jowke with its places and lineup, Sala But afterparty lineup
 
 Plus two fixes she already ran: `supabase/fixes/2026-10-23_push_apikey.sql` and `2026-10-23b_push_key_from_db.sql`.
 
