@@ -6,13 +6,13 @@ const fan: FanShape = {
   kind: 'fan', x: 60, y: 0, w: 654, h: 745, djx: 258, djy: 240, radii: [165, 252, 339, 448],
   rows: ['front front', 'front', 'center', 'back', 'back back'], cols: [67, 92],
   poly: [[253, 40], [713, 545], [713, 740], [73, 740], [73, 330], [113, 150]],
+  cut: 310, near: [{ x: 128, y: 374, w: 110, h: 170, label: 'by bar' }],
 }
 const zone = (id: string, type: Place['type'], cx: number, cy: number, w: number, h: number, extra = {}): Place =>
   ({ id, type, name: id, near: '', n: null, x: cx, y: cy, shape: { kind: 'zone', cx, cy, w, h, ...extra } })
 const jowke: Place[] = [
   { id: 'j-pista', type: 'stage', name: 'Dance floor', near: '', n: 1, x: 380, y: 450, shape: fan },
   zone('j-bar1', 'bar', 548, 370, 440, 70, { angle: 49.8 }),
-  zone('j-bar2', 'bar', 183, 459, 110, 170),
   zone('j-entrada', 'open', 45, 975, 90, 100, { door: true }),
   zone('j-terraza', 'open', 265, 1370, 530, 1260, { bg: true }),
   zone('j-camino', 'open', 57, 390, 115, 700, { bg: true }),
@@ -23,20 +23,24 @@ const at = (r: number, deg: number) => n(fan.djx + r * Math.cos((deg * Math.PI) 
 
 describe('open-air floor (Jowke)', () => {
   it('names rows by rings around the DJ and columns by the two lines', () => {
-    expect(fanZone(fan, ...at(130, 80))).toBe('front front, middle')
-    expect(fanZone(fan, ...at(200, 80))).toBe('front, middle')
-    expect(fanZone(fan, ...at(300, 100))).toBe('center, left')
-    expect(fanZone(fan, ...at(400, 45))).toBe('back, right')
-    expect(fanZone(fan, ...at(480, 80))).toBe('back back, middle')
+    expect(fanZone(fan, ...at(130, 80))).toBe('front front middle')
+    expect(fanZone(fan, ...at(200, 80))).toBe('front middle')
+    expect(fanZone(fan, ...at(300, 120))).toBe('center left')
+    expect(fanZone(fan, ...at(400, 45))).toBe('back right')
+    expect(fanZone(fan, ...at(480, 80))).toBe('back back middle')
+  })
+  it('the old bar by the DJ is "front left · by bar" / "center left · by bar"', () => {
+    expect(fanZone(fan, ...n(183, 430))).toBe('front left · by bar')
+    expect(fanZone(fan, ...n(183, 520))).toBe('center left · by bar')
+    expect(placeAt(jowke, 1, 183, 459)?.place.id).toBe('j-pista')
   })
   it('where() reads like the drawing', () => {
-    expect(where(jowke[0], ...at(130, 80))).toBe('Dance floor · front front, middle')
+    expect(where(jowke[0], ...at(130, 80))).toBe('Dance floor · front front middle')
   })
   it('a tap lands on the floor, the slanted bar, or nothing off the venue', () => {
     expect(placeAt(jowke, 1, 380, 450)?.place.id).toBe('j-pista')
     expect(placeAt(jowke, 1, 548, 370)?.place.id).toBe('j-bar1')
     expect(placeAt(jowke, 1, 520, 340)?.place.id).toBe('j-bar1') // along the bar, off its middle
-    expect(placeAt(jowke, 1, 183, 459)?.place.id).toBe('j-bar2')
     expect(placeAt(jowke, 1, 650, 120)).toBeNull() // empty space beside the building
     expect(placeAt(jowke, 1, 45, 975)?.place.shape).toMatchObject({ door: true })
     expect(placeAt(jowke, 1, 300, 1400)?.place.id).toBe('j-terraza')

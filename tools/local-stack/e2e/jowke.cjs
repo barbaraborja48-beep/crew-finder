@@ -67,16 +67,27 @@ const lastPin = async name => (await sql(`select p.name, p.near, c.nx, c.ny, c.p
   const floor = B.locator('[style*="cursor: crosshair"]').first()
   const fb = await floor.boundingBox()
   const k = fb.width / 654 // close-up px per map px
-  await B.mouse.click(fb.x + (258 - 60) * k, fb.y + (240 + 135) * k)
+  const CUT = 310 // the close-up starts below the DJ booth
+  await B.mouse.click(fb.x + (258 - 60) * k, fb.y + (240 + 135 - CUT) * k)
   await B.waitForTimeout(1500)
   const line = await B.getByText(/^Dance floor · /).first().textContent()
   console.log('   footer:', line)
-  check(/front front, middle|front front, left/.test(line), 'just under the DJ is "front front"')
-  await B.mouse.click(fb.x + (258 - 60 + 400 * Math.cos(1.2)) * k, fb.y + (240 + 400 * Math.sin(1.2)) * k)
+  check(/front front (middle|left)/.test(line), 'just under the DJ is "front front"')
+  check(await B.getByText('front front', { exact: true }).count() === 0, 'no row labels on the floor')
+  await B.mouse.click(fb.x + (183 - 60) * k, fb.y + (430 - CUT) * k)
+  await B.waitForTimeout(1500)
+  check((await B.getByText(/^Dance floor · /).first().textContent()) === 'Dance floor · front left · by bar', 'by the small bar: "front left · by bar"')
+  await B.mouse.click(fb.x + (183 - 60) * k, fb.y + (520 - CUT) * k)
+  await B.waitForTimeout(1500)
+  check((await B.getByText(/^Dance floor · /).first().textContent()) === 'Dance floor · center left · by bar', 'below it: "center left · by bar"')
+  await B.mouse.click(fb.x + (258 - 60 + 400 * Math.cos(1.2)) * k, fb.y + (240 + 400 * Math.sin(1.2) - CUT) * k)
   await B.waitForTimeout(1500)
   const line2 = await B.getByText(/^Dance floor · /).first().textContent()
   console.log('   footer:', line2)
-  check(/back, middle/.test(line2), 'further back in the middle is "back, middle"')
+  check(/back middle/.test(line2), 'further back in the middle is "back middle"')
+  await B.getByRole('button', { name: 'WC / water' }).click()
+  await B.waitForTimeout(1500)
+  check((await lastPin('Barbara'))?.place_id === 'j-wc2', 'the "WC / water" button pins at the WC / water')
   await shot(B, 'j3-pin-floor', { wait: 800 })
 
   // Map: slide down to the inside, entrance and the closed rooms
@@ -103,8 +114,7 @@ const lastPin = async name => (await sql(`select p.name, p.near, c.nx, c.ny, c.p
     check(await B.getByText('That part is closed off tonight').isVisible().catch(() => false), 'a tap on the closed rooms says it\'s closed, no pin')
     await shot(B, 'j6-closed', { wait: 200 })
   } else check(false, 'closed rooms visible after sliding')
-  pin = await lastPin('Barbara')
-  check(pin.place_id === 'j-pista', 'still pinned on the dance floor after tapping the closed part')
+  check((await lastPin('Barbara')).place_id === 'j-wc2', 'still pinned at the WC / water after tapping the closed part')
 
   // the door: arriving / leaving
   await B.getByRole('button', { name: 'Arriving / leaving' }).dispatchEvent('click')

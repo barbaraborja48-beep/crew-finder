@@ -13,15 +13,21 @@ export type SquareShape = { kind: 'square'; cx: number; cy: number; w: number; h
  * Club venues: the patch of floor a place covers. Tap anywhere in it to pin there. No close-up.
  * bg: whole-floor fallback, no icon. angle: turned (degrees), for a bar along a slanted wall.
  * door: the way in and out; tapping it asks "arriving or leaving, and when?" instead of pinning.
+ * of: a button for it under that stage's close-up (WC, water, rest area). noIcon: not drawn on the map.
  */
-export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean; angle?: number; door?: boolean }
+export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean; angle?: number; door?: boolean; of?: string; noIcon?: boolean }
 /**
  * An open-air dance floor around a DJ booth (Mondo Krystal at Jowke). The close-up is the map
  * itself, cut to the box x, y, w, h (image px); nx/ny are spots in that box. Rows are rings around
  * the DJ (radii, image px), columns split at two angles (degrees, 0 = right, 90 = straight down).
  * poly: the floor's real outline, so a tap on the path outside it isn't "dance floor".
+ * cut: the close-up starts this far down the box (skips the DJ booth); spots stay relative to the whole box.
+ * near: patches of floor that add to the name ("front left · by bar").
  */
-export type FanShape = { kind: 'fan'; x: number; y: number; w: number; h: number; djx: number; djy: number; radii: number[]; rows: string[]; cols: [number, number]; poly: [number, number][] }
+export type FanShape = {
+  kind: 'fan'; x: number; y: number; w: number; h: number; djx: number; djy: number; radii: number[]; rows: string[]; cols: [number, number]; poly: [number, number][]
+  cut?: number; near?: { x: number; y: number; w: number; h: number; label: string }[]
+}
 export type Shape = LineShape | BoxShape | SquareShape | ZoneShape | FanShape
 export const isLine = (sh: Shape): sh is LineShape => sh.kind === 'counter' || sh.kind === 'trucks'
 
@@ -155,13 +161,15 @@ export const CORNER = 0.12
 /** Rows curve around the DJ like the crowd does: the row lines dip in the middle. */
 export const rowDip = (sh: SquareShape, nx: number) => (sh.bulge ?? 0) * (1 - (2 * nx - 1) ** 2)
 
-/** Open-air floor: which ring around the DJ and which side. "front front, left" */
+/** Open-air floor: which ring around the DJ and which side. "front front left", "front left · by bar" */
 export function fanZone(sh: FanShape, nx: number, ny: number) {
-  const [dx, dy] = [sh.x + nx * sh.w - sh.djx, sh.y + ny * sh.h - sh.djy]
+  const [x, y] = [sh.x + nx * sh.w, sh.y + ny * sh.h]
+  const [dx, dy] = [x - sh.djx, y - sh.djy]
   const d = Math.hypot(dx, dy)
   const i = sh.radii.findIndex(r => d < r)
   const a = (Math.atan2(dy, dx) * 180) / Math.PI
-  return `${sh.rows[i < 0 ? sh.rows.length - 1 : i]}, ${a > sh.cols[1] ? 'left' : a > sh.cols[0] ? 'middle' : 'right'}`
+  const by = sh.near?.find(n => x >= n.x && x <= n.x + n.w && y >= n.y && y <= n.y + n.h)
+  return `${sh.rows[i < 0 ? sh.rows.length - 1 : i]} ${a > sh.cols[1] ? 'left' : a > sh.cols[0] ? 'middle' : 'right'}${by ? ` · ${by.label}` : ''}`
 }
 
 /** Is this image point inside the polygon? */
