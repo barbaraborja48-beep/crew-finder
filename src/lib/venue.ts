@@ -1,4 +1,4 @@
-export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'picnic' | 'open' | 'coat' | 'outside' | 'rest'
+export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'picnic' | 'open' | 'coat' | 'outside' | 'rest' | 'door' | 'attraction'
 
 /** Real outline on the map image (pixels). Places with a shape get a close-up view. */
 export type LineShape = { kind: 'counter' | 'trucks'; cx: number; cy: number; len: number; angle: number; depth: number }
@@ -75,11 +75,23 @@ export const STAGE_LOGOS: Record<string, string> = {
   jail: '/assets/logos/jail.png',
 }
 
+/** Hallowfest at Fabrik: same idea, logos cut from its timetable. */
+export const FABRIK_ID = 'e1e0a000-0000-4000-8000-000000000004'
+export const FABRIK_LOGOS: Record<string, string> = {
+  'f-main': '/assets/logos/fabrik-code.png',
+  'f-area19': '/assets/logos/fabrik-nexus.png',
+  'f-club': '/assets/logos/fabrik-rave404.png',
+  'f-crystal': '/assets/logos/fabrik-resistencia.png',
+  'f-hangar': '/assets/logos/fabrik-loop.png',
+  'f-satelite': '/assets/logos/fabrik-xtreme.png',
+}
+
 /** Venues you can start a crew at. The maps live in /public/assets. */
 export const VENUES = [
   { id: 'e1e0a000-0000-4000-8000-000000000001', name: 'Halloween Takeover', where: 'Recinto Iberdrola Music · 31.10.26' },
   { id: 'e1e0a000-0000-4000-8000-000000000002', name: 'Mondo Disko', where: 'Sala But · two floors' },
   { id: 'e1e0a000-0000-4000-8000-000000000003', name: 'Mondo Krystal', where: 'Terraza Jowke · open air' },
+  { id: 'e1e0a000-0000-4000-8000-000000000004', name: 'Hallowfest', where: 'Fabrik · 31.10.26' },
 ]
 
 /** The venue as seen on one floor: same venue, that floor's map. */
@@ -103,6 +115,8 @@ export const TYPES: Record<PlaceType, [label: string, icon: string]> = {
   coat: ['Coat check', 'ph ph-coat-hanger'],
   outside: ['Smoking area', 'ph ph-cigarette'],
   rest: ['Rest area', 'ph ph-armchair'],
+  door: ['Entrances', 'ph ph-door-open'],
+  attraction: ['Attractions', 'ph ph-skull'],
 }
 
 export const STATUS: [icon: string, label: string][] = [

@@ -22,6 +22,8 @@ export function activityFor(type: PlaceType | undefined, status: number, live: b
       return 'wait'
     case 'outside':
       return 'smoke'
+    case 'door':
+      return 'walk'
     case 'picnic':
     case 'medic':
       return 'sit'

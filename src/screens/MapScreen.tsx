@@ -413,6 +413,20 @@ export function MapScreen() {
             <i aria-hidden className="ph-bold ph-map-pin" />
             {meHere ? 'Still here' : 'Pin me here'}
           </button>
+          {sel.type === 'door' && (
+            // Hallowfest's doors: tell the crew you're arriving or leaving
+            <button
+              className="btn btn-secondary btn-block"
+              style={{ height: 40 }}
+              onClick={() => {
+                store.ui({ areaSel: null })
+                setEta(true)
+              }}
+            >
+              <i aria-hidden className="ph ph-door-open" />
+              Arriving / leaving
+            </button>
+          )}
         </div>
       )}
     </div>
