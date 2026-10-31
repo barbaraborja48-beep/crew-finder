@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { ageOf, dotOpacity, fraction, fresh, pinned } from '../lib/rules'
-import { agoLong, CORNER, hasCloseUp, isLine, mapPos, placeAt, placeTitle, rowDip, TYPES, where, type FanShape, type Place, type PlaceType, type SquareShape, type Venue } from '../lib/venue'
+import { agoLong, CORNER, HALLOWEEN_ID, hasCloseUp, isLine, mapPos, placeAt, placeTitle, rowDip, TYPES, where, type FanShape, type Place, type PlaceType, type SquareShape, type Venue } from '../lib/venue'
 import { DjDisplay, DjSheet } from '../components/DjDisplay'
 import { useNow, mySync, crewRows, statusOf, myHuddle, suggested, badgeFor } from '../lib/view'
 import { Avatar, Scaled, SmsFallback, SyncPill } from '../components/common'
@@ -391,7 +391,7 @@ export function StageScreen() {
         )}
         {festivalDj && (
           <div style={{ marginBottom: 6 }}>
-            <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} round />
+            <DjDisplay sets={lineup} now={now} onOpen={() => setDjOpen(true)} round fit={s.venue?.id !== HALLOWEEN_ID} />
           </div>
         )}
         {place.type === 'stage' && !(club && lineup.length > 0) && (

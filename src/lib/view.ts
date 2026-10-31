@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { fresh, pinned } from './rules'
 import { latestDots, placeTitleShort, store, type Checkin, type Member, type Message, type State } from './store'
-import { ago, HALLOWEEN_ID, STAGE_LOGOS, STATUS, TYPES, where } from './venue'
+import { ago, FABRIK_ID, FABRIK_LOGOS, HALLOWEEN_ID, STAGE_LOGOS, STATUS, TYPES, where } from './venue'
 import type { Badge } from '../components/common'
 import { activeMoves, groupOf, moveCrew, pendingInvites, shownDots, suggestions, type Move, type Suggestion } from './social'
 
@@ -102,7 +102,7 @@ export function buddyInvites(s: State, now: number) {
 
 export const statusOf = (m: Member) => STATUS[m.status] ?? STATUS[0]
 
-/** The symbol on someone's profile circle: their spot (a stage's logo at Halloween) or their status. */
+/** The symbol on someone's profile circle: their spot (a stage's logo at Halloween and Hallowfest) or their status. */
 export function badgeFor(s: State, m: Member, dot: Checkin | null): Badge | null {
   if (m.ghost) return { label: 'Ghost', icon: 'ph-fill ph-ghost' }
   if (s.badgeMode === 'status') {
@@ -111,7 +111,7 @@ export function badgeFor(s: State, m: Member, dot: Checkin | null): Badge | null
   }
   const p = dot && pinned(dot, Date.now()) ? store.place(dot.place_id) : undefined
   if (!p) return null
-  const logo = s.venue?.id === HALLOWEEN_ID ? STAGE_LOGOS[p.id] : undefined
+  const logo = s.venue?.id === HALLOWEEN_ID ? STAGE_LOGOS[p.id] : s.venue?.id === FABRIK_ID ? FABRIK_LOGOS[p.id] : undefined
   return logo ? { logo, label: p.name } : { icon: TYPES[p.type][1], label: p.name }
 }
 export const ageLabel = (s: number) => (Number.isFinite(s) ? ago(s) : '')

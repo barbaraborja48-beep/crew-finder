@@ -33,7 +33,8 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 13. New query again. Paste `supabase/migrations/20261101120000_custom_invite_code.sql` and **Run**. Lets whoever starts a crew pick its invite code (e.g. `halloween-squad`). The result says `custom invite codes ready`.
 14. New query again. Paste `supabase/migrations/20261102120000_insights_and_map.sql` and **Run**. Stats (Table Editor → `app_events`), and each night saved before the 48 h cleanup (`night_stats`, `night_members`, `night_pins`, `night_messages`), plus the Halloween map without its poster title and legends. The result says `insights ready`.
 15. New query again. Paste `supabase/migrations/20261103120000_mondo_krystal_jowke.sql` and **Run**. Adds Mondo Krystal at Terraza Jowke (open-air map, dance floor rings, closed rooms, Arriving / leaving at the entrance) with its 31 Oct set times, and puts the 31 Oct afterparty set times on Mondo Disko at Sala But. The result says `mondo krystal ready`. Safe to run again.
-16. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+16. New query again. Paste `supabase/migrations/20261104120000_fabrik_hallowfest.sql` and **Run**. Adds Hallowfest at Fabrik (festival map, six stages with their 53 sets, the haunted house and the doors). The result says `hallowfest ready` and `53`. Safe to run again.
+17. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
 
 > Already ran some of these before? Just run the ones you haven't. Each file is safe to run once on top of the previous ones.
 
