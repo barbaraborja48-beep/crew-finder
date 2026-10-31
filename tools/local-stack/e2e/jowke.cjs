@@ -56,35 +56,42 @@ const lastPin = async name => (await sql(`select p.name, p.near, c.nx, c.ny, c.p
   await M.locator('nav.tabbar button', { hasText: 'Pin' }).click()
   await M.waitForTimeout(600)
   await shot(M, 'j2-pin-page', { wait: 600 })
-  await M.getByRole('button', { name: 'Inside / rest area' }).click()
+  await M.getByRole('button', { name: 'Inside / rest' }).click()
   await M.waitForTimeout(1500)
   pin = await lastPin('Mar')
-  check(pin && pin.place_id === 'j-dentro', 'the "Inside / rest area" tile pins inside')
+  check(pin && pin.place_id === 'j-dentro', 'the "Inside / rest" tile pins inside')
 
-  // Barbara's Pin page: tap just under the DJ booth = front front
+  // Barbara's Pin page: Sala But's layout on Barbara's grid. Every cell is named like her drawing.
   await B.locator('nav.tabbar button', { hasText: 'Pin' }).click()
   await B.waitForTimeout(1500)
-  const floor = B.locator('[style*="cursor: crosshair"]').first()
-  const fb = await floor.boundingBox()
-  const k = fb.width / 654 // close-up px per map px
-  const CUT = 310 // the close-up starts below the DJ booth
-  await B.mouse.click(fb.x + (258 - 60) * k, fb.y + (240 + 135 - CUT) * k)
+  const fb = await B.locator('[style*="cursor: crosshair"]').first().boundingBox()
+  const ROWS = ['front front', 'front', 'center', 'back', 'back back']
+  const gy = (gx, d) => d + 0.07 * (1 - (2 * gx - 1) ** 2) * 4 * d * (1 - d) // rows dip like Sala But's
+  let named = 0
+  for (const [i, row] of ROWS.entries())
+    for (const [j, col] of ['left', 'middle', 'right'].entries()) {
+      const gx = (j + 0.5) / 3
+      const tap = { x: fb.x + gx * fb.width, y: fb.y + gy(gx, (i + 0.5) / 5) * fb.height }
+      await B.mouse.click(tap.x, tap.y)
+      await B.waitForTimeout(900)
+      const line = await B.getByText(/^Dance floor · /).first().textContent()
+      if (line.replace(' · by bar', '') === `Dance floor · ${row} ${col}`) named++
+      else console.log('   cell', row, col, '→', line)
+      if (i === 2 && j === 1) {
+        const you = await B.getByText('You', { exact: true }).first().boundingBox()
+        check(you && Math.abs(you.x + you.width / 2 - tap.x) < 8 && Math.abs(you.y - tap.y) < 22, 'the penguin lands under the finger (center middle)')
+      }
+    }
+  check(named === 15, `all 15 cells pin with their own name (${named})`)
+  check(await B.getByText('back back right', { exact: true }).isVisible(), 'cells are labelled like Sala But')
+  await B.getByRole('button', { name: 'Bar', exact: true }).first().click()
   await B.waitForTimeout(1500)
-  const line = await B.getByText(/^Dance floor · /).first().textContent()
-  console.log('   footer:', line)
-  check(/front front (middle|left)/.test(line), 'just under the DJ is "front front"')
-  check(await B.getByText('front front', { exact: true }).count() === 0, 'no row labels on the floor')
-  await B.mouse.click(fb.x + (183 - 60) * k, fb.y + (430 - CUT) * k)
+  const byBar = await B.getByText(/^Dance floor · /).first().textContent()
+  console.log('   footer:', byBar)
+  check(/(front|center) left · by bar$/.test(byBar), 'the Bar button on the left pins "… left · by bar"')
+  await B.getByRole('button', { name: 'Bar', exact: true }).nth(1).click()
   await B.waitForTimeout(1500)
-  check((await B.getByText(/^Dance floor · /).first().textContent()) === 'Dance floor · front left · by bar', 'by the small bar: "front left · by bar"')
-  await B.mouse.click(fb.x + (183 - 60) * k, fb.y + (520 - CUT) * k)
-  await B.waitForTimeout(1500)
-  check((await B.getByText(/^Dance floor · /).first().textContent()) === 'Dance floor · center left · by bar', 'below it: "center left · by bar"')
-  await B.mouse.click(fb.x + (258 - 60 + 400 * Math.cos(1.2)) * k, fb.y + (240 + 400 * Math.sin(1.2) - CUT) * k)
-  await B.waitForTimeout(1500)
-  const line2 = await B.getByText(/^Dance floor · /).first().textContent()
-  console.log('   footer:', line2)
-  check(/back middle/.test(line2), 'further back in the middle is "back middle"')
+  check((await lastPin('Barbara'))?.place_id === 'j-bar1', 'the Bar button on the right pins at the long bar')
   await B.getByRole('button', { name: 'WC / water' }).click()
   await B.waitForTimeout(1500)
   check((await lastPin('Barbara'))?.place_id === 'j-wc2', 'the "WC / water" button pins at the WC / water')

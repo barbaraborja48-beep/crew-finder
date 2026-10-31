@@ -2,17 +2,20 @@
 -- buttons. Halloween Takeover and Sala But don't change. Run after SQL 15 (Hallowfest).
 --
 -- Jowke:
---   The Pin page starts below the DJ booth ("cut": the DJ screen is above it anyway). Spots stay
---   relative to the same box, so nobody's pin moves.
+--   The Pin page looks like Sala But's (she didn't like the render): a grid with her five rows
+--   (front front … back back, her rings around the DJ "unrolled") and three columns ("grid": angle
+--   and radius breakpoints, rows dip in the middle like Sala But's). WC / water and Inside / rest
+--   either side of the DJ screen, Bar and Outside buttons on the edges. Spots stay on the same
+--   map box, so nobody's pin moves.
 --   The small bar by the DJ booth is no longer its own spot: that patch of floor is "front left ·
---   by bar" / "center left · by bar" (dance floor "near"). Pins already there move onto the dance
---   floor at the same point on the map, and a meet spot there becomes the dance floor.
---   Buttons under the floor: Inside / rest area and WC / water ("of": the dance floor).
+--   by bar" / "center left · by bar" (dance floor "near"; a "Bar" button on the left pins you
+--   there). Pins already there move onto the dance floor at the same point on the map, and a meet
+--   spot there becomes the dance floor.
 -- Hallowfest:
 --   WC and Water by each stage, as buttons under every stage's close-up. They sit next to their
 --   stage on the map, with no icon of their own ("noIcon"), since the poster doesn't show where they are.
 
-update public.places set shape = shape || '{"cut": 310, "near": [{"x": 128, "y": 374, "w": 110, "h": 170, "label": "by bar"}]}'
+update public.places set shape = (shape - 'cut') || '{"near": [{"x": 128, "y": 374, "w": 110, "h": 170, "label": "by bar"}], "grid": {"a": [155, 92, 67, 12], "r": [100, 165, 252, 339, 448, 600], "bulge": 0.07}}'
 where venue_id = 'e1e0a000-0000-4000-8000-000000000003' and id = 'j-pista';
 
 -- j-bar2 (zone cx 183, cy 459, 110×170) → the same map point on the dance floor (box x 60, y 0, 654×745).
@@ -32,9 +35,6 @@ update public.crews set meet_spot_place_id = 'j-pista'
 where venue_id = 'e1e0a000-0000-4000-8000-000000000003' and meet_spot_place_id = 'j-bar2';
 
 delete from public.places where venue_id = 'e1e0a000-0000-4000-8000-000000000003' and id = 'j-bar2';
-
-update public.places set shape = shape || '{"of": "j-pista"}'
-where venue_id = 'e1e0a000-0000-4000-8000-000000000003' and id in ('j-dentro', 'j-wc2');
 
 -- Hallowfest: WC to the right of each stage, Water to the left (image px on /assets/fabrik-map.webp).
 insert into public.places (venue_id, id, type, name, near, n, x, y, shape)

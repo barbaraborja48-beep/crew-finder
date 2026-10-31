@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { fanZone, inPoly, isClosed, mapPos, placeAt, where, type FanShape, type Place, type Venue } from './venue'
+import { fanToGrid, fanZone, gridToFan, gridY, inPoly, isClosed, mapPos, placeAt, where, type FanShape, type Place, type Venue } from './venue'
 
 // Jowke, as in supabase/migrations/20261103120000_mondo_krystal_jowke.sql (map image px).
 const fan: FanShape = {
   kind: 'fan', x: 60, y: 0, w: 654, h: 745, djx: 258, djy: 240, radii: [165, 252, 339, 448],
   rows: ['front front', 'front', 'center', 'back', 'back back'], cols: [67, 92],
   poly: [[253, 40], [713, 545], [713, 740], [73, 740], [73, 330], [113, 150]],
-  cut: 310, near: [{ x: 128, y: 374, w: 110, h: 170, label: 'by bar' }],
+  near: [{ x: 128, y: 374, w: 110, h: 170, label: 'by bar' }],
+  grid: { a: [155, 92, 67, 12], r: [100, 165, 252, 339, 448, 600], bulge: 0.07 },
 }
 const zone = (id: string, type: Place['type'], cx: number, cy: number, w: number, h: number, extra = {}): Place =>
   ({ id, type, name: id, near: '', n: null, x: cx, y: cy, shape: { kind: 'zone', cx, cy, w, h, ...extra } })
@@ -65,6 +66,38 @@ describe('open-air floor (Jowke)', () => {
   it('polygon test', () => {
     expect(inPoly(fan.poly, 400, 600)).toBe(true)
     expect(inPoly(fan.poly, 650, 120)).toBe(false)
+  })
+})
+
+describe('Jowke Pin page grid (her rows and columns, unrolled)', () => {
+  it('each grid cell is the same zone as on her drawing', () => {
+    const rows = fan.rows
+    rows.forEach((row, i) =>
+      ['left', 'middle', 'right'].forEach((col, j) => {
+        const gx = (j + 0.5) / 3
+        const [nx, ny] = gridToFan(fan, gx, gridY(fan.grid!, gx, (i + 0.5) / rows.length))
+        expect(fanZone(fan, nx, ny).replace(' · by bar', '')).toBe(`${row} ${col}`)
+      }),
+    )
+  })
+  it('a floor spot comes back to the same grid spot', () => {
+    for (const [x, y] of [[300, 500], [420, 650], [200, 420], [600, 600]]) {
+      const [nx, ny] = n(x, y)
+      const [gx, gy] = fanToGrid(fan, nx, ny)
+      const [bx, by] = gridToFan(fan, gx, gy)
+      expect(bx).toBeCloseTo(nx, 4)
+      expect(by).toBeCloseTo(ny, 4)
+    }
+  })
+  it('a grid tap off the real floor is pulled onto it, inside the 0–1 box the database allows', () => {
+    for (const [gx, gy] of [[1, 0.99], [0, 0.99], [1, 0], [0, 0]]) {
+      const [nx, ny] = gridToFan(fan, gx, gy)
+      expect(nx).toBeGreaterThanOrEqual(0)
+      expect(nx).toBeLessThanOrEqual(1)
+      expect(ny).toBeGreaterThanOrEqual(0)
+      expect(ny).toBeLessThanOrEqual(1)
+      expect(inPoly(fan.poly, fan.x + nx * fan.w, fan.y + ny * fan.h)).toBe(true)
+    }
   })
 })
 
