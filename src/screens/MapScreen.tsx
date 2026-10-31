@@ -261,7 +261,7 @@ export function MapScreen() {
                     )
                   })}
                 {v &&
-                  areas.filter(a => !(a.shape?.kind === 'zone' && a.shape.bg)).map(a => {
+                  areas.filter(a => !(a.shape?.kind === 'zone' && (a.shape.bg || a.shape.noIcon))).map(a => {
                     const p = toMap(v, a.x, a.y)
                     const on = ui.areaSel === a.id
                     if (a.shape?.kind === 'zone' && a.shape.door)

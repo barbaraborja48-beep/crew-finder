@@ -13,15 +13,24 @@ export type SquareShape = { kind: 'square'; cx: number; cy: number; w: number; h
  * Club venues: the patch of floor a place covers. Tap anywhere in it to pin there. No close-up.
  * bg: whole-floor fallback, no icon. angle: turned (degrees), for a bar along a slanted wall.
  * door: the way in and out; tapping it asks "arriving or leaving, and when?" instead of pinning.
+ * of: a button for it under that stage's close-up (WC, water, rest area). noIcon: not drawn on the map.
  */
-export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean; angle?: number; door?: boolean }
+export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean; angle?: number; door?: boolean; of?: string; noIcon?: boolean }
 /**
  * An open-air dance floor around a DJ booth (Mondo Krystal at Jowke). The close-up is the map
  * itself, cut to the box x, y, w, h (image px); nx/ny are spots in that box. Rows are rings around
  * the DJ (radii, image px), columns split at two angles (degrees, 0 = right, 90 = straight down).
  * poly: the floor's real outline, so a tap on the path outside it isn't "dance floor".
+ * near: patches of floor that add to the name ("front left · by bar").
+ * grid: the Pin page draws the floor like Sala But's, a straight grid: the rings "unrolled" into rows
+ *   and the angles into columns. a: angle breakpoints left → right (the column lines in between),
+ *   r: radius breakpoints front → back (the ring radii in between), bulge: rows dip in the middle.
  */
-export type FanShape = { kind: 'fan'; x: number; y: number; w: number; h: number; djx: number; djy: number; radii: number[]; rows: string[]; cols: [number, number]; poly: [number, number][] }
+export type FanGrid = { a: number[]; r: number[]; bulge?: number }
+export type FanShape = {
+  kind: 'fan'; x: number; y: number; w: number; h: number; djx: number; djy: number; radii: number[]; rows: string[]; cols: [number, number]; poly: [number, number][]
+  near?: { x: number; y: number; w: number; h: number; label: string }[]; grid?: FanGrid
+}
 export type Shape = LineShape | BoxShape | SquareShape | ZoneShape | FanShape
 export const isLine = (sh: Shape): sh is LineShape => sh.kind === 'counter' || sh.kind === 'trucks'
 
@@ -155,13 +164,88 @@ export const CORNER = 0.12
 /** Rows curve around the DJ like the crowd does: the row lines dip in the middle. */
 export const rowDip = (sh: SquareShape, nx: number) => (sh.bulge ?? 0) * (1 - (2 * nx - 1) ** 2)
 
-/** Open-air floor: which ring around the DJ and which side. "front front, left" */
+/** Open-air floor: which ring around the DJ and which side. "front front left", "front left · by bar" */
 export function fanZone(sh: FanShape, nx: number, ny: number) {
-  const [dx, dy] = [sh.x + nx * sh.w - sh.djx, sh.y + ny * sh.h - sh.djy]
+  const [x, y] = [sh.x + nx * sh.w, sh.y + ny * sh.h]
+  const [dx, dy] = [x - sh.djx, y - sh.djy]
   const d = Math.hypot(dx, dy)
   const i = sh.radii.findIndex(r => d < r)
   const a = (Math.atan2(dy, dx) * 180) / Math.PI
-  return `${sh.rows[i < 0 ? sh.rows.length - 1 : i]}, ${a > sh.cols[1] ? 'left' : a > sh.cols[0] ? 'middle' : 'right'}`
+  const by = sh.near?.find(n => x >= n.x && x <= n.x + n.w && y >= n.y && y <= n.y + n.h)
+  return `${sh.rows[i < 0 ? sh.rows.length - 1 : i]} ${a > sh.cols[1] ? 'left' : a > sh.cols[0] ? 'middle' : 'right'}${by ? ` · ${by.label}` : ''}`
+}
+
+/** v along piecewise breakpoints (rising or falling) → 0–1, each piece an equal share. */
+function toUnit(bps: number[], v: number) {
+  const n = bps.length - 1
+  for (let i = 0; i < n; i++) {
+    const t = (v - bps[i]) / (bps[i + 1] - bps[i])
+    if (t <= 1) return Math.max(0, (i + t) / n)
+  }
+  return 1
+}
+function fromUnit(bps: number[], u: number) {
+  const n = bps.length - 1
+  const f = Math.min(n - 1e-9, Math.max(0, u * n))
+  const i = Math.floor(f)
+  return bps[i] + (f - i) * (bps[i + 1] - bps[i])
+}
+/** Grid rows dip in the middle (0 at the edges, `bulge` in the middle), top and bottom stay put. */
+const dipOf = (g: FanGrid, gx: number) => (g.bulge ?? 0) * (1 - (2 * gx - 1) ** 2)
+/** Unrolled depth (0–1) → height on the Pin page (0–1), and back. */
+export const gridY = (g: FanGrid, gx: number, d: number) => d + dipOf(g, gx) * 4 * d * (1 - d)
+function gridDepth(g: FanGrid, gx: number, y: number) {
+  const c = dipOf(g, gx) * 4
+  if (c < 1e-6) return y
+  return ((1 + c) - Math.sqrt((1 + c) ** 2 - 4 * c * y)) / (2 * c)
+}
+
+/** A floor spot (box 0–1) → where it sits on the Pin page grid (0–1). */
+export function fanToGrid(sh: FanShape, nx: number, ny: number): [number, number] {
+  const g = sh.grid!
+  const [dx, dy] = [sh.x + nx * sh.w - sh.djx, sh.y + ny * sh.h - sh.djy]
+  let a = (Math.atan2(dy, dx) * 180) / Math.PI
+  if (a < -90) a += 360 // beside the booth on the left: still the left column
+  const gx = toUnit(g.a, a)
+  return [gx, gridY(g, gx, toUnit(g.r, Math.hypot(dx, dy)))]
+}
+
+/** A tap on the Pin page grid → the floor spot (box 0–1), pulled onto the real floor if it falls off it. */
+export function gridToFan(sh: FanShape, gx: number, gy: number): [number, number] {
+  const g = sh.grid!
+  const d = gridDepth(g, gx, gy)
+  const at = (ux: number, ud: number): [number, number] => {
+    const [a, r] = [(fromUnit(g.a, ux) * Math.PI) / 180, fromUnit(g.r, ud)]
+    return [sh.djx + r * Math.cos(a), sh.djy + r * Math.sin(a)]
+  }
+  let [x, y] = at(gx, d)
+  if (!inPoly(sh.poly, x, y)) {
+    // The floor isn't a perfect fan: part of this cell is off it (past a wall). Take the nearest
+    // spot of the same cell that is on the floor, so the name still matches the cell tapped.
+    const [nc, nr] = [g.a.length - 1, g.r.length - 1]
+    const [c, rw] = [Math.min(nc - 1, Math.floor(gx * nc)), Math.min(nr - 1, Math.floor(d * nr))]
+    let best: [number, number, number] | null = null
+    for (let i = 0; i <= 16; i++)
+      for (let j = 0; j <= 16; j++) {
+        const [ux, ud] = [(c + 0.02 + (0.96 * i) / 16) / nc, (rw + 0.02 + (0.96 * j) / 16) / nr]
+        const [px, py] = at(ux, ud)
+        const dist = (ux - gx) ** 2 + (ud - d) ** 2
+        if (inPoly(sh.poly, px, py) && (!best || dist < best[2])) best = [px, py, dist]
+      }
+    if (best) [x, y] = best
+  }
+  if (!inPoly(sh.poly, x, y)) {
+    const [cx, cy] = [sh.x + sh.w * 0.5, sh.y + sh.h * 0.7] // the middle of the floor
+    let [lo, hi] = [0, 1]
+    for (let i = 0; i < 20; i++) {
+      const m = (lo + hi) / 2
+      if (inPoly(sh.poly, x + (cx - x) * m, y + (cy - y) * m)) hi = m
+      else lo = m
+    }
+    ;[x, y] = [x + (cx - x) * hi, y + (cy - y) * hi]
+  }
+  const c = (v: number) => Math.min(1, Math.max(0, v))
+  return [c((x - sh.x) / sh.w), c((y - sh.y) / sh.h)]
 }
 
 /** Is this image point inside the polygon? */

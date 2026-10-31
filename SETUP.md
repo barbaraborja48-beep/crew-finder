@@ -34,7 +34,8 @@ This step creates the tables, the privacy rules, the Elrow map pins, and the pho
 14. New query again. Paste `supabase/migrations/20261102120000_insights_and_map.sql` and **Run**. Stats (Table Editor → `app_events`), and each night saved before the 48 h cleanup (`night_stats`, `night_members`, `night_pins`, `night_messages`), plus the Halloween map without its poster title and legends. The result says `insights ready`.
 15. New query again. Paste `supabase/migrations/20261103120000_mondo_krystal_jowke.sql` and **Run**. Adds Mondo Krystal at Terraza Jowke (open-air map, dance floor rings, closed rooms, Arriving / leaving at the entrance) with its 31 Oct set times, and puts the 31 Oct afterparty set times on Mondo Disko at Sala But. The result says `mondo krystal ready`. Safe to run again.
 16. New query again. Paste `supabase/migrations/20261104120000_fabrik_hallowfest.sql` and **Run**. Adds Hallowfest at Fabrik (festival map, six stages with their 53 sets, the haunted house and the doors). The result says `hallowfest ready` and `53`. Safe to run again.
-17. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
+17. New query again. Paste `supabase/migrations/20261105120000_jowke_fixes_wc_water.sql` and **Run** (after step 16). Jowke's Pin page starts below the DJ booth, the small bar by the DJ becomes "front left / center left · by bar", WC and water buttons at Jowke and under every Hallowfest stage. The result says `fixes ready | 12 | 0`. Safe to run again.
+18. Check it worked: open **Table Editor** → `places`. You should see 29 rows (elrow, Brunch!, WC, Bar…).
 
 > Already ran some of these before? Just run the ones you haven't. Each file is safe to run once on top of the previous ones.
 
