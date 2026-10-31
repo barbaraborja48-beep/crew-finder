@@ -92,7 +92,7 @@ const tab = (p, name) => p.locator('nav.tabbar button', { hasText: name }).click
   const X = await phone('Mondo', '2026-10-25T01:30:00+02:00', { viewport: IPHONE })
   await X.goto(APP)
   await X.getByRole('button', { name: 'Start a crew' }).click().catch(() => {})
-  await X.getByRole('radio', { name: /Mondo/ }).click()
+  await X.getByRole('radio', { name: /Mondo Disko/ }).click()
   await X.getByPlaceholder('Crew name, e.g. Saturday squad').fill('mondo test')
   await X.getByRole('button', { name: 'Create crew' }).click()
   await X.getByPlaceholder('What your crew calls you').fill('Barbara')

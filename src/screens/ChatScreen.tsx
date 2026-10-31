@@ -99,12 +99,13 @@ export function ChatScreen() {
           }
           if (m.type === 'status') {
             const ghost = /ghost/.test(m.text)
-            const icon = ghost ? 'ph ph-ghost' : STATUS.find(([, l]) => m.text.startsWith(l))?.[0] ?? 'ph-fill ph-smiley'
+            const eta = /^is (arriving|leaving)/.exec(m.text)?.[1] // "is arriving in 10 minutes"
+            const icon = ghost ? 'ph ph-ghost' : eta ? (eta === 'arriving' ? 'ph ph-sign-in' : 'ph ph-sign-out') : STATUS.find(([, l]) => m.text.startsWith(l))?.[0] ?? 'ph-fill ph-smiley'
             return (
               <div key={m.id} style={sysLine}>
                 <i aria-hidden className={icon} style={{ color }} />
                 {nameOf(m.member_id)}
-                {ghost ? ' ' : ' · '}
+                {ghost || eta ? ' ' : ' · '}
                 {m.text} · {stamp(m.born, now)}
               </div>
             )

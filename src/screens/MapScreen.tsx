@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { store, useStore } from '../lib/store'
 import { fresh, pinned } from '../lib/rules'
-import { floorView, hasCloseUp, mapPos, onFloor, outline, placeAt, toMap, TYPES, MAP_W, MAP_H, type Place, type PlaceType, type Venue } from '../lib/venue'
+import { floorView, hasCloseUp, isClosed, mapPos, onFloor, outline, placeAt, toMap, TYPES, MAP_W, MAP_H, type Place, type PlaceType, type Venue } from '../lib/venue'
 import { useNow, mySync, crewRows, statusOf, ageLabel, myHuddle, suggested, badgeFor, type CrewRow } from '../lib/view'
 import { rowOpacity } from '../lib/rules'
 import { Avatar, Freshness, ProfileButton, Scaled, SmsFallback, SyncPill, WeakSignalHint } from '../components/common'
@@ -10,7 +10,7 @@ import { Penguin } from '../components/Penguin'
 import { activityFor, type Activity } from '../lib/penguin'
 import { fraction } from '../lib/rules'
 import type { State } from '../lib/store'
-import { SocialBanners, SuggestMark } from '../components/Social'
+import { EtaSheet, SocialBanners, SuggestMark } from '../components/Social'
 import { lineupState } from '../components/DjDisplay'
 import type { DjSet } from '../lib/social'
 
@@ -35,15 +35,15 @@ export function MapScreen() {
   }, [])
   const fv = s.venue && floorView(s.venue, ui.floor)
   const unit = MAP_W / Math.max(1, box.w) // screen px → map frame units
-  // The map's own height: a club plan as framed; a festival map down to its lowest place
-  // (+ room for the icon), where the venue ends.
-  const natural = !fv || floors.length ? MAP_H : Math.max(200, ...s.places.map(p => toMap(fv, p.x, p.y).y + 24))
+  // The map's own height: a club plan as framed (a tall one, like Jowke, all of it); a festival
+  // map down to its lowest place (+ room for the icon), where the venue ends.
+  const natural = !fv ? MAP_H : floors.length ? Math.max(MAP_H, Math.round(fv.map_h * fv.view_scale + fv.view_oy)) : Math.max(200, ...s.places.map(p => toMap(fv, p.x, p.y).y + 24))
   const wanted = split != null ? split * box.h * unit : floors.length ? Math.max(MAP_H, 0.5 * box.h * unit) : natural
   const frameH = Math.round(Math.min(floors.length ? 560 : natural, Math.max(MIN_FRAME, wanted)))
   // Less room than the map needs: the map keeps its size (pins stay readable) and slides
   // up and down under the finger. More room on a club plan: it sits in the middle.
   const contentH = Math.max(frameH, natural)
-  const v = fv && { ...fv, view_oy: fv.view_oy + (floors.length && frameH > MAP_H ? (frameH - MAP_H) / 2 : 0) }
+  const v = fv && { ...fv, view_oy: fv.view_oy + (floors.length && frameH > natural ? (frameH - natural) / 2 : 0) }
   // Dragging the list's handle: the map gets whatever is above the finger.
   const drag = useRef<{ y: number; h: number } | null>(null)
   const onHandleDown = (e: React.PointerEvent) => {
@@ -81,14 +81,19 @@ export function MapScreen() {
     const r = e.currentTarget.getBoundingClientRect()
     const x = ((e.clientX - r.left) / r.width) * MAP_W
     const y = ((e.clientY - r.top) / r.height) * contentH
-    const hit = placeAt(s.places, ui.floor, (x - v.view_ox) / v.view_scale, (y - v.view_oy) / v.view_scale)
+    const [ix, iy] = [(x - v.view_ox) / v.view_scale, (y - v.view_oy) / v.view_scale]
     store.ui({ areaSel: null })
+    if (isClosed(v, ix, iy)) return store.toast('That part is closed off tonight', 'ph ph-prohibit', 'var(--color-neutral-400)')
+    const hit = placeAt(s.places, ui.floor, ix, iy)
+    if (hit?.place.shape?.kind === 'zone' && hit.place.shape.door) return setEta(true)
     if (hit) {
       store.checkIn(hit.place.id, hit.nx, hit.ny, false, true)
       navigator.vibrate?.(15)
-    } else store.toast('Tap inside the venue or the smoking area', 'ph ph-map-pin', 'var(--color-neutral-400)')
+    } else store.toast(s.places.some(p => p.name === 'Smoking area') ? 'Tap inside the venue or the smoking area' : 'Tap inside the venue', 'ph ph-map-pin', 'var(--color-neutral-400)')
   }
 
+  // The way in and out (Jowke): "arriving / leaving in 10 min" for the crew.
+  const [eta, setEta] = useState(false)
   const sel = store.place(ui.areaSel)
   const here = sel ? liveFriends.filter(r => r.dot!.place_id === sel.id) : []
   const meHere = !!sel && meLive && mine!.place_id === sel.id
@@ -138,6 +143,7 @@ export function MapScreen() {
           h={frameH}
           ch={contentH}
           doubleTap={!floors.length} // on club maps a tap pins you, so no double-tap zoom
+          top={floors.length > 0 && natural > MAP_H} // a tall club plan (Jowke) opens on its dance floor; Sala But as before
           overlay={
             <>
             {floors.length > 0 && !sel && (
@@ -228,13 +234,14 @@ export function MapScreen() {
                     {areas.filter(a => a.type === 'outside' && a.shape?.kind === 'zone').map(a => (
                       <Lounge key={a.id} v={v} p={a} inv={inv} />
                     ))}
+                    {(v.closed ?? []).map((c, i) => <Closed key={i} v={v} c={c} inv={inv} />)}
                   </svg>
                 )}
                 {v && isOn('stage') &&
                   stages.map(st => {
                     const p = toMap(v, st.x, st.y)
                     // Club dance floor: nothing drawn, the plan already shows it; tap anywhere to pin.
-                    if (st.shape?.kind === 'square') return null
+                    if (st.shape?.kind === 'square' || st.shape?.kind === 'fan') return null
                     return (
                       <div key={st.id}>
                         <button
@@ -257,6 +264,18 @@ export function MapScreen() {
                   areas.filter(a => !(a.shape?.kind === 'zone' && a.shape.bg)).map(a => {
                     const p = toMap(v, a.x, a.y)
                     const on = ui.areaSel === a.id
+                    if (a.shape?.kind === 'zone' && a.shape.door)
+                      return (
+                        <button
+                          key={a.id}
+                          onClick={() => setEta(true)}
+                          // starts at the door and reads inwards, so it isn't cut off at the map's edge
+                          style={{ position: 'absolute', left: Math.max(4, p.x - 20), top: p.y, transform: `translateY(-50%) scale(${Math.max(inv, 0.45)})`, transformOrigin: '0 50%', zIndex: 2, border: 0, cursor: 'pointer', height: 24, padding: '0 9px', borderRadius: 999, background: 'rgba(10,10,16,.9)', color: 'var(--color-neutral-100)', boxShadow: '0 0 0 1px var(--color-accent-600), 0 0 10px -3px var(--color-accent)', font: '500 9px var(--font-body)', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
+                        >
+                          <i aria-hidden className="ph ph-door-open" style={{ fontSize: 12 }} />
+                          Arriving / leaving
+                        </button>
+                      )
                     return (
                       <button
                         key={a.id}
@@ -362,6 +381,7 @@ export function MapScreen() {
         ))}
       </div>
 
+      {eta && <EtaSheet onClose={() => setEta(false)} />}
       {sel && (
         <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(var(--tabbar-h) + 12px)', zIndex: 4, borderRadius: 20, background: 'var(--color-surface)', boxShadow: 'var(--shadow-lg)', padding: 14, display: 'flex', flexDirection: 'column', gap: 12, animation: 'rise .2s ease-out' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -502,7 +522,29 @@ function Lounge({ v, p, inv }: { v: Venue; p: Place; inv: number }) {
     <g style={{ pointerEvents: 'none' }}>
       <rect x={a.x} y={a.y} width={w} height={h} fill="rgba(0,120,120,.28)" stroke={teal} strokeOpacity={0.75} strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`} />
       <text x={a.x + w / 2} y={a.y + h / 2 + 3} textAnchor="middle" fontSize={8} fontWeight={500} fill={teal} fillOpacity={0.9} fontFamily="Inter, sans-serif">
-        smoking area (outside)
+        {p.name === 'Smoking area' ? 'smoking area (outside)' : p.name.toLowerCase()}
+      </text>
+    </g>
+  )
+}
+
+/** A part of the plan that's shut off tonight: hatched, and taps there don't pin. */
+function Closed({ v, c, inv }: { v: Venue; c: { x: number; y: number; w: number; h: number }; inv: number }) {
+  const a = toMap(v, c.x, c.y)
+  const b = toMap(v, c.x + c.w, c.y + c.h)
+  const [w, h] = [b.x - a.x, b.y - a.y]
+  const id = `closed-${Math.round(c.x)}-${Math.round(c.y)}`
+  return (
+    <g style={{ pointerEvents: 'none' }}>
+      <defs>
+        <pattern id={id} width={8} height={8} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1={0} y1={0} x2={0} y2={8} stroke="rgba(255,255,255,.14)" strokeWidth={2} />
+        </pattern>
+      </defs>
+      <rect x={a.x} y={a.y} width={w} height={h} fill="rgba(0,0,0,.62)" />
+      <rect x={a.x} y={a.y} width={w} height={h} fill={`url(#${id})`} stroke="rgba(255,255,255,.25)" strokeWidth={inv} strokeDasharray={`${4 * inv} ${3 * inv}`} />
+      <text x={a.x + w / 2} y={a.y + h / 2 + 3} textAnchor="middle" fontSize={9} fontWeight={500} fill="rgba(255,255,255,.55)" fontFamily="Inter, sans-serif">
+        closed off
       </text>
     </g>
   )

@@ -12,9 +12,10 @@ interface View {
   ty: number
 }
 
-export function ZoomPan({ w, h, ch = h, children, overlay, corner, doubleTap = true }: { w: number; h: number; ch?: number; children: (z: number) => ReactNode; overlay?: ReactNode; corner?: ReactNode; doubleTap?: boolean }) {
+/** top: a tall layer starts at its top (Jowke's dance floor) instead of its middle, and stays put when the frame resizes. */
+export function ZoomPan({ w, h, ch = h, children, overlay, corner, doubleTap = true, top = false }: { w: number; h: number; ch?: number; children: (z: number) => ReactNode; overlay?: ReactNode; corner?: ReactNode; doubleTap?: boolean; top?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [view, setView] = useState<View>({ z: 1, tx: 0, ty: Math.min(0, (h - ch) / 2) })
+  const [view, setView] = useState<View>({ z: 1, tx: 0, ty: top ? 0 : Math.min(0, (h - ch) / 2) })
   const [smooth, setSmooth] = useState(false) // animate button / double-tap zooms, not finger moves
   const v = useRef(view)
   v.current = view
@@ -30,7 +31,7 @@ export function ZoomPan({ w, h, ch = h, children, overlay, corner, doubleTap = t
     frame.current = { h, ch }
     if (f.h === h && f.ch === ch) return
     setSmooth(false)
-    setView(c => clamp(c.z, c.tx, c.ty + (h - f.h) / 2 - ((ch - f.ch) * c.z) / 2))
+    setView(c => clamp(c.z, c.tx, top ? c.ty : c.ty + (h - f.h) / 2 - ((ch - f.ch) * c.z) / 2))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [h, ch])
   /** Screen point → layer units. */

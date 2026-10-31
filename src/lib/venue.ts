@@ -1,4 +1,4 @@
-export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'picnic' | 'open' | 'coat' | 'outside'
+export type PlaceType = 'stage' | 'wc' | 'bar' | 'water' | 'medic' | 'food' | 'picnic' | 'open' | 'coat' | 'outside' | 'rest'
 
 /** Real outline on the map image (pixels). Places with a shape get a close-up view. */
 export type LineShape = { kind: 'counter' | 'trucks'; cx: number; cy: number; len: number; angle: number; depth: number }
@@ -9,9 +9,20 @@ export type BoxShape = { kind: 'kiosk' | 'tables'; cx: number; cy: number; size:
  * zones split (0–1), when they aren't even thirds.
  */
 export type SquareShape = { kind: 'square'; cx: number; cy: number; w: number; h: number; angle: number; rows?: [number, number]; cols?: [number, number]; bulge?: number }
-/** Club venues: the patch of floor a place covers. Tap anywhere in it to pin there. No close-up. */
-export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean } // bg: whole-floor fallback, no icon
-export type Shape = LineShape | BoxShape | SquareShape | ZoneShape
+/**
+ * Club venues: the patch of floor a place covers. Tap anywhere in it to pin there. No close-up.
+ * bg: whole-floor fallback, no icon. angle: turned (degrees), for a bar along a slanted wall.
+ * door: the way in and out; tapping it asks "arriving or leaving, and when?" instead of pinning.
+ */
+export type ZoneShape = { kind: 'zone'; cx: number; cy: number; w: number; h: number; bg?: boolean; angle?: number; door?: boolean }
+/**
+ * An open-air dance floor around a DJ booth (Mondo Krystal at Jowke). The close-up is the map
+ * itself, cut to the box x, y, w, h (image px); nx/ny are spots in that box. Rows are rings around
+ * the DJ (radii, image px), columns split at two angles (degrees, 0 = right, 90 = straight down).
+ * poly: the floor's real outline, so a tap on the path outside it isn't "dance floor".
+ */
+export type FanShape = { kind: 'fan'; x: number; y: number; w: number; h: number; djx: number; djy: number; radii: number[]; rows: string[]; cols: [number, number]; poly: [number, number][] }
+export type Shape = LineShape | BoxShape | SquareShape | ZoneShape | FanShape
 export const isLine = (sh: Shape): sh is LineShape => sh.kind === 'counter' || sh.kind === 'trucks'
 
 export interface Place {
@@ -49,6 +60,7 @@ export interface Venue {
   view_ox: number
   view_oy: number
   floors?: Floor[]
+  closed?: { x: number; y: number; w: number; h: number }[] // parts of the plan that are shut off: no pinning there
   default_meet?: string | null
   lineup?: { name: string; start: string; end: string; stage?: string }[] // the DJ screen's set times (festivals: per stage)
 }
@@ -67,6 +79,7 @@ export const STAGE_LOGOS: Record<string, string> = {
 export const VENUES = [
   { id: 'e1e0a000-0000-4000-8000-000000000001', name: 'Halloween Takeover', where: 'Recinto Iberdrola Music · 31.10.26' },
   { id: 'e1e0a000-0000-4000-8000-000000000002', name: 'Mondo Disko', where: 'Sala But · two floors' },
+  { id: 'e1e0a000-0000-4000-8000-000000000003', name: 'Mondo Krystal', where: 'Terraza Jowke · open air' },
 ]
 
 /** The venue as seen on one floor: same venue, that floor's map. */
@@ -89,6 +102,7 @@ export const TYPES: Record<PlaceType, [label: string, icon: string]> = {
   open: ['Open areas', 'ph ph-tree'],
   coat: ['Coat check', 'ph ph-coat-hanger'],
   outside: ['Smoking area', 'ph ph-cigarette'],
+  rest: ['Rest area', 'ph ph-armchair'],
 }
 
 export const STATUS: [icon: string, label: string][] = [
@@ -127,6 +141,32 @@ export const CORNER = 0.12
 /** Rows curve around the DJ like the crowd does: the row lines dip in the middle. */
 export const rowDip = (sh: SquareShape, nx: number) => (sh.bulge ?? 0) * (1 - (2 * nx - 1) ** 2)
 
+/** Open-air floor: which ring around the DJ and which side. "front front, left" */
+export function fanZone(sh: FanShape, nx: number, ny: number) {
+  const [dx, dy] = [sh.x + nx * sh.w - sh.djx, sh.y + ny * sh.h - sh.djy]
+  const d = Math.hypot(dx, dy)
+  const i = sh.radii.findIndex(r => d < r)
+  const a = (Math.atan2(dy, dx) * 180) / Math.PI
+  return `${sh.rows[i < 0 ? sh.rows.length - 1 : i]}, ${a > sh.cols[1] ? 'left' : a > sh.cols[0] ? 'middle' : 'right'}`
+}
+
+/** Is this image point inside the polygon? */
+export function inPoly(poly: [number, number][], x: number, y: number) {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i]
+    const [xj, yj] = poly[j]
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+/** A zone turned by its angle: image px → its own frame (and back). */
+const turn = (x: number, y: number, deg = 0) => {
+  const a = (deg * Math.PI) / 180
+  return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]
+}
+
 /** Stages and shaped places (bars, trucks, picnic) open a tap-where-you-are close-up. */
 export const hasCloseUp = (p: Place | undefined) => !!p && (p.type === 'stage' || (!!p.shape && p.shape.kind !== 'zone'))
 
@@ -147,7 +187,7 @@ export function spot(p: Place, nx: number, ny: number) {
 export function where(p: Place | undefined, nx = 0.5, ny = 0.5) {
   if (!p) return 'Somewhere'
   const fl = p.floor ? ` · Planta ${p.floor}` : ''
-  if (p.type === 'stage') return `${p.name} · ${p.shape?.kind === 'square' ? floorZone(p.shape, nx, ny) : zone(nx, ny)}${fl}`
+  if (p.type === 'stage') return `${p.name} · ${p.shape?.kind === 'square' ? floorZone(p.shape, nx, ny) : p.shape?.kind === 'fan' ? fanZone(p.shape, nx, ny) : zone(nx, ny)}${fl}`
   const base = p.near ? `${p.name} · by ${p.near}` : p.name
   const s = p.shape ? spot(p, nx, ny) : ''
   return `${s ? `${base} · ${s}` : base}${fl}`
@@ -190,7 +230,11 @@ export const mapPos = (v: Venue, p: Place, nx: number, ny: number) => {
     const [x, y] = squarePoint(sh, nx, ny)
     return toMap(v, x, y)
   }
-  if (sh?.kind === 'zone') return toMap(v, sh.cx + (nx - 0.5) * sh.w, sh.cy + (ny - 0.5) * sh.h)
+  if (sh?.kind === 'zone') {
+    const [u, w] = turn((nx - 0.5) * sh.w, (ny - 0.5) * sh.h, sh.angle)
+    return toMap(v, sh.cx + u, sh.cy + w)
+  }
+  if (sh?.kind === 'fan') return toMap(v, sh.x + nx * sh.w, sh.y + ny * sh.h)
   if (sh) return toMap(v, sh.cx + (nx - 0.5) * sh.size * 1.4, sh.cy + (ny - 0.5) * sh.size * 1.4)
   const c = toMap(v, p.x, p.y)
   const k = p.type === 'stage' ? 1 : 0.5
@@ -209,7 +253,12 @@ export function outline(v: Venue, sh: Shape) {
     pts = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([x, y]) => squarePoint(sh, x, y))
   } else if (sh.kind === 'zone') {
     const [w, h] = [sh.w / 2, sh.h / 2]
-    pts = [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => [sh.cx + x, sh.cy + y])
+    pts = [[-w, -h], [w, -h], [w, h], [-w, h]].map(([x, y]) => {
+      const [u, t] = turn(x, y, sh.angle)
+      return [sh.cx + u, sh.cy + t]
+    })
+  } else if (sh.kind === 'fan') {
+    pts = sh.poly
   } else {
     const h = sh.size / 2
     pts = [[-h, -h], [h, -h], [h, h], [-h, h]].map(([x, y]) => [sh.cx + x, sh.cy + y])
@@ -223,6 +272,10 @@ export function squarePoint(sh: SquareShape, nx: number, ny: number): [number, n
   const [u, w] = [(nx - 0.5) * sh.w, (ny - 0.5) * sh.h] // right, back
   return [sh.cx + Math.cos(a) * u - Math.sin(a) * w, sh.cy + Math.sin(a) * u + Math.cos(a) * w]
 }
+
+/** Is this image point in a part of the plan that's shut off tonight? */
+export const isClosed = (v: Venue | null | undefined, x: number, y: number) =>
+  !!v?.closed?.some(c => x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h)
 
 /**
  * Club venues: which place a tap on the floor plan lands in (image px), and where
@@ -241,8 +294,14 @@ export function placeAt(places: Place[], floor: number, x: number, y: number) {
       ny = (-dx * Math.sin(a) + dy * Math.cos(a)) / sh.h + 0.5
       area = sh.w * sh.h
     } else if (sh.kind === 'zone') {
-      nx = (x - sh.cx) / sh.w + 0.5
-      ny = (y - sh.cy) / sh.h + 0.5
+      const [u, w] = turn(x - sh.cx, y - sh.cy, -(sh.angle ?? 0))
+      nx = u / sh.w + 0.5
+      ny = w / sh.h + 0.5
+      area = sh.w * sh.h
+    } else if (sh.kind === 'fan') {
+      if (!inPoly(sh.poly, x, y)) continue
+      nx = (x - sh.x) / sh.w
+      ny = (y - sh.y) / sh.h
       area = sh.w * sh.h
     } else continue
     if (nx < 0 || nx > 1 || ny < 0 || ny > 1) continue

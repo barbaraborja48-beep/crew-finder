@@ -1,6 +1,6 @@
 // The DJ screen on the dance floor: who's playing right now, on a slow lava-lamp aura.
 // Runs off the phone's clock (corrected by the server's), so it needs no data at all.
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { store, useStore } from '../lib/store'
 import { planTimeline, REMINDER_OPTIONS, reminderLabel, setKey, switchTimes, type DjSet, type PlanItem } from '../lib/social'
@@ -56,9 +56,24 @@ function Aura({ calm = false }: { calm?: boolean }) {
   )
 }
 
-export function DjDisplay({ sets, now, onOpen, round = false }: { sets: DjSet[]; now: number; onOpen: () => void; round?: boolean }) {
+/** fit: a name too long for the screen gets smaller instead of cut off (the Mondo nights; festival stages as before). */
+export function DjDisplay({ sets, now, onOpen, round = false, fit = false }: { sets: DjSet[]; now: number; onOpen: () => void; round?: boolean; fit?: boolean }) {
   const { current, next, over } = lineupState(sets, now)
   const shown = current ?? next
+  const nameRef = useRef<HTMLDivElement>(null)
+  const name = over ? 'See you next time' : shown?.name
+  useLayoutEffect(() => {
+    const el = nameRef.current
+    if (!fit || !el) return
+    const shrink = () => {
+      el.style.fontSize = ''
+      const [room, need] = [el.clientWidth - 20, el.scrollWidth - 20] // 20: the name's right padding
+      if (need > room && room > 0) el.style.fontSize = `${Math.max(15, (parseFloat(getComputedStyle(el).fontSize) * room) / need - 0.5)}px`
+    }
+    shrink()
+    window.addEventListener('resize', shrink)
+    return () => window.removeEventListener('resize', shrink)
+  }, [fit, name])
   const f = current ? (now - ms(current.start)) / (ms(current.end) - ms(current.start)) : 0
   const tag = shown ? dayTag(shown.start) : null
   return (
@@ -82,10 +97,11 @@ export function DjDisplay({ sets, now, onOpen, round = false }: { sets: DjSet[];
             </span>
           )}
         </div>
-        <div className="dj-name">{over ? 'See you next time' : shown?.name}</div>
+        <div className="dj-name" ref={nameRef}>{name}</div>
         {shown && !over && (
           <div className="dj-time">
             {hhmm(shown.start)} <i aria-hidden className="ph ph-arrow-right" /> {hhmm(shown.end)}
+            {shown.note && <span style={{ opacity: 0.75 }}>· {shown.note}</span>}
           </div>
         )}
         {current && (
@@ -174,6 +190,7 @@ export function DjSheet({ sets: stageSets, now, onClose, stage, startTab }: { se
                   </div>
                   <div className="dj-row-main">
                     <div className="dj-row-name" style={festival ? { fontSize: 19 } : undefined}>{s.name}</div>
+                    {s.note && <div className="dj-label" style={{ fontSize: 11 }}>{s.note}</div>}
                     {live && (
                       <div className="dj-bar" style={{ marginTop: 6 }}>
                         <span style={{ width: `${f * 100}%` }} />

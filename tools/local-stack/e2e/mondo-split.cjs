@@ -2,7 +2,7 @@
 const { sql, phone, startCrew, shot, check, done } = require('./lib.cjs')
 ;(async () => {
   const B = await phone('Barbara', '2026-10-25T01:30:00+02:00', { viewport: { width: 402, height: 874 } })
-  await startCrew(B, 'mondo', 'Mondo')
+  await startCrew(B, 'mondo', 'Mondo Disko')
   await B.getByPlaceholder('What your crew calls you').fill('Barbara')
   await B.getByRole('button', { name: 'Join crew' }).click()
   await B.locator('nav.tabbar').waitFor()

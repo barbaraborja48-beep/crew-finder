@@ -6,7 +6,7 @@ const { phone, startCrew, shot, done } = require('./lib.cjs')
   await B.context().addInitScript(() => document.addEventListener('DOMContentLoaded', () => {
     const s = document.createElement('style'); s.textContent = '*{animation:none!important;transition:none!important;caret-color:transparent!important}'; document.head.appendChild(s)
   }))
-  const code = await startCrew(B, 'mondo', 'Mondo')
+  const code = await startCrew(B, 'mondo', 'Mondo Disko')
   await B.getByPlaceholder('What your crew calls you').fill('Barbara')
   await B.getByRole('button', { name: 'Join crew' }).click()
   await B.locator('nav.tabbar').waitFor()

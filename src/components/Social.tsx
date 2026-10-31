@@ -236,6 +236,47 @@ export function PlanMoveSheet({ preset, onClose }: { preset?: string; onClose: (
   )
 }
 
+/** At the way in and out: tell the crew "arriving in 10 min" or "leaving now". Nothing is pinned. */
+export function EtaSheet({ onClose }: { onClose: () => void }) {
+  const me = store.me()
+  const [kind, setKind] = useState<'arriving' | 'leaving'>(() => (store.myDot() ? 'leaving' : 'arriving'))
+  const [mins, setMins] = useState(10)
+  const line = `${me?.name ?? 'You'} is ${kind} ${mins ? `in ${mins} minutes` : 'now'}`
+  return (
+    <Sheet onClose={onClose}>
+      <div style={{ fontSize: 20, fontWeight: 500, letterSpacing: '-.02em' }}>Arriving or leaving?</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, flex: 'none' }}>
+        {(['arriving', 'leaving'] as const).map(k => (
+          <button key={k} style={{ ...chip(kind === k), height: 40, justifyContent: 'center' }} onClick={() => setKind(k)}>
+            <i aria-hidden className={k === 'arriving' ? 'ph ph-sign-in' : 'ph ph-sign-out'} />
+            {k === 'arriving' ? 'Arriving' : 'Leaving'}
+          </button>
+        ))}
+      </div>
+      <div style={label}>HOW LONG UNTIL</div>
+      <div className="no-scrollbar" style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 'none' }}>
+        {WHEN.map(m => (
+          <button key={m} style={chip(mins === m)} onClick={() => setMins(m)}>
+            {m ? `${m} min` : 'Now'}
+          </button>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--color-neutral-400)', lineHeight: 1.4 }}>Your crew gets “{line}”.</div>
+      <button
+        className="btn btn-primary btn-block"
+        style={{ height: 46, flex: 'none' }}
+        onClick={() => {
+          store.announceEta(kind, mins)
+          onClose()
+        }}
+      >
+        <i aria-hidden className="ph-bold ph-paper-plane-tilt" />
+        Tell the crew
+      </button>
+    </Sheet>
+  )
+}
+
 /** A buddy wandered off: let them go, and say where you think they went (or not). */
 export function LetGoSheet({ member, onClose }: { member: Member; onClose: () => void }) {
   const [spot, setSpot] = useState<string | null>(null)
